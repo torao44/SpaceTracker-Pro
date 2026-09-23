@@ -207,6 +207,7 @@ button{font-family:var(--font-body);}
   display:flex; align-items:center; justify-content:center;
   padding:20px;
 }
+.modal-overlay[hidden]{display:none !important;}
 .modal{
   position:relative; width:min(440px, 100%);
   background:var(--bg-card); border:1px solid var(--line); border-radius:var(--radius);
