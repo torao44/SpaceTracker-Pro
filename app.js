@@ -160,8 +160,8 @@ function renderCrew(list) {
   els.crewList.innerHTML = list.map((p, i) => `
     <li data-index="${i}" tabindex="0" role="button" aria-haspopup="dialog">
       ${p.image
-        ? `<img class="crew-avatar" src="${p.image}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'crew-avatar',textContent:'${initials(p.name)}'}))">`
-        : `<div class="crew-avatar">${initials(p.name)}</div>`
+        ? `<img class="crew-avatar" data-fallback="${escapeHtml(initials(p.name))}" src="${p.image}" alt="" loading="lazy">`
+        : `<div class="crew-avatar">${escapeHtml(initials(p.name))}</div>`
       }
       <div class="crew-text">
         <span class="name">${escapeHtml(p.name)}</span>
@@ -170,6 +170,17 @@ function renderCrew(list) {
     </li>
   `).join('') || '<li>データがありません</li>';
 }
+
+// 画像が読み込めなかった場合、イニシャルのアイコンに差し替える
+// （error イベントはバブリングしないため capture:true で委譲する）
+els.crewList?.addEventListener('error', (e) => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.classList.contains('crew-avatar')) return;
+  const div = document.createElement('div');
+  div.className = 'crew-avatar';
+  div.textContent = img.dataset.fallback || '?';
+  img.replaceWith(div);
+}, true);
 
 function openCrewModal(index) {
   const p = currentCrew[index];
@@ -195,8 +206,8 @@ function openCrewModal(index) {
   }
 
   const photoHtml = p.image
-    ? `<img class="crew-detail-photo" src="${p.image}" alt="${escapeHtml(p.name)}" onerror="this.outerHTML='<div class=&quot;crew-detail-avatar-fallback&quot;>${initials(p.name)}</div>'">`
-    : `<div class="crew-detail-avatar-fallback">${initials(p.name)}</div>`;
+    ? `<img class="crew-detail-photo" data-fallback="${escapeHtml(initials(p.name))}" src="${p.image}" alt="${escapeHtml(p.name)}">`
+    : `<div class="crew-detail-avatar-fallback">${escapeHtml(initials(p.name))}</div>`;
 
   els.crewModalBody.innerHTML = `
     ${photoHtml}
@@ -212,6 +223,15 @@ function openCrewModal(index) {
   els.crewModalOverlay.hidden = false;
   els.crewModalClose.focus();
 }
+
+els.crewModalBody?.addEventListener('error', (e) => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.classList.contains('crew-detail-photo')) return;
+  const div = document.createElement('div');
+  div.className = 'crew-detail-avatar-fallback';
+  div.textContent = img.dataset.fallback || '?';
+  img.replaceWith(div);
+}, true);
 
 function closeCrewModal() {
   els.crewModalOverlay.hidden = true;
@@ -295,10 +315,10 @@ els.agencyFilter?.addEventListener('click', (e) => {
 });
 
 /* ---------------- Starlink可視予報 & ISS可視パス（現在地ベース） ----------------
-   Heavens-Aboveは通過予測の計算に日没・薄明・軌道長期予報など複雑な天文計算が
-   必要なため自前実装はせず、現在地のクエリ付きで直接リンクする方式にしている。
-   (StarlinkLaunchPasses.aspx は直近に列車状のStarlink打上げがないとサーバー側で
-   エラーになることがあるため、より安定した main.aspx 経由に変更) */
+   Heavens-Aboveは位置情報をセッション/Cookieで管理する仕組みのため、
+   シークレット（プライベート）ブラウジングだとCookieが保存されず、
+   正しいURLでもサーバー側エラーになることがある。
+   そのため深いリンクではなく、まずトップページを開いてもらう方式にしている。 */
 els.locateBtn?.addEventListener('click', () => {
   if (!('geolocation' in navigator)) {
     els.starlinkResult.innerHTML = '<p>このブラウザは位置情報に対応していません。</p>';
@@ -307,18 +327,14 @@ els.locateBtn?.addEventListener('click', () => {
   els.starlinkResult.innerHTML = '<p>現在地を取得中...</p>';
   navigator.geolocation.getCurrentPosition(pos => {
     const { latitude, longitude } = pos.coords;
-    const tz = -new Date().getTimezoneOffset() / 60;
-    const lat = latitude.toFixed(4);
-    const lng = longitude.toFixed(4);
-    const mainUrl = `https://www.heavens-above.com/main.aspx?lat=${lat}&lng=${lng}&loc=Unnamed&alt=0&tz=${tz}`;
-    const issUrl = `https://www.heavens-above.com/PassSummary.aspx?satid=25544&lat=${lat}&lng=${lng}&loc=Unnamed&alt=0&tz=${tz}`;
     els.starlinkResult.innerHTML = `
       <div class="pass">
-        現在地（緯度 ${latitude.toFixed(2)}°, 経度 ${longitude.toFixed(2)}°）でHeavens-Aboveの通過予測を開きます。
+        現在地: 緯度 ${latitude.toFixed(2)}°, 経度 ${longitude.toFixed(2)}°<br>
+        Heavens-Aboveのトップページで、この緯度・経度を「Select from map」または検索欄に入力して場所を保存すると、
+        以降はISSやStarlinkの通過予測がそのまま使えるようになります（シークレットウィンドウでは保存されないのでご注意ください）。
       </div>
       <div class="link-row">
-        <a href="${mainUrl}" target="_blank" rel="noopener" class="btn-secondary">Starlinkなど衛星一覧を見る ↗</a>
-        <a href="${issUrl}" target="_blank" rel="noopener" class="btn-secondary">ISSの可視パス（今後3日）を見る ↗</a>
+        <a href="https://www.heavens-above.com/" target="_blank" rel="noopener" class="btn-secondary">Heavens-Aboveを開く ↗</a>
       </div>
     `;
   }, err => {
