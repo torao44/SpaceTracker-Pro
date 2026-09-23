@@ -21,6 +21,9 @@ const els = {
   kpDesc: document.getElementById('kpDesc'),
   meteorList: document.getElementById('meteorList'),
   installBtn: document.getElementById('installBtn'),
+  crewModalOverlay: document.getElementById('crewModalOverlay'),
+  crewModalClose: document.getElementById('crewModalClose'),
+  crewModalBody: document.getElementById('crewModalBody'),
 };
 
 /* ---------------- ISS 現在位置 ---------------- */
@@ -54,21 +57,21 @@ async function fetchWithTimeout(url, ms = 8000) {
 }
 
 async function loadCrew() {
-  // 1) 安定版ミラー（HTTPS・CORS対応、GitHub Pages配信）
+  // 1) 安定版ミラー（HTTPS・CORS対応、GitHub Pages配信、詳細プロフィール付き）
   try {
     const d = await fetchWithTimeout('https://corquaid.github.io/international-space-station-APIs/JSON/people-in-space.json');
     const iss = (d.people || []).filter(p => p.iss === true || p.spacecraft?.includes('ISS'));
-    renderCrew(iss.length ? iss.map(p => ({ name: p.name, craft: p.spacecraft || 'ISS' })) : (d.people || []).map(p => ({ name: p.name, craft: p.spacecraft })));
+    renderCrew(iss.length ? iss : (d.people || []));
     return;
   } catch (e) {
     console.warn('ミラーAPIの取得に失敗、open-notifyへフォールバック', e);
   }
 
-  // 2) フォールバック: open-notify（不安定な場合あり）
+  // 2) フォールバック: open-notify（不安定な場合あり、詳細情報なし）
   try {
     const d = await fetchWithTimeout('https://api.open-notify.org/astros.json');
     const iss = (d.people || []).filter(p => p.craft === 'ISS');
-    renderCrew(iss.map(p => ({ name: p.name, craft: p.craft })));
+    renderCrew(iss.map(p => ({ name: p.name, spacecraft: p.craft })));
   } catch (e) {
     els.crewList.innerHTML = '<li>クルー情報を取得できませんでした。しばらくしてから再読み込みしてください。</li>';
     els.crewCount.textContent = '--';
@@ -76,15 +79,75 @@ async function loadCrew() {
   }
 }
 
+let currentCrew = [];
+
 function renderCrew(list) {
+  currentCrew = list;
   els.crewCount.textContent = `${list.length}名`;
-  els.crewList.innerHTML = list.map(p => `
-    <li>
+  els.crewList.innerHTML = list.map((p, i) => `
+    <li data-index="${i}" tabindex="0" role="button" aria-haspopup="dialog">
       <span class="name">${escapeHtml(p.name)}</span>
-      <span class="craft">${escapeHtml(p.craft || 'ISS')} 搭乗中</span>
+      <span class="craft">${escapeHtml(p.spacecraft || p.craft || 'ISS')} 搭乗中</span>
     </li>
   `).join('') || '<li>データがありません</li>';
 }
+
+function openCrewModal(index) {
+  const p = currentCrew[index];
+  if (!p) return;
+
+  const rows = [];
+  if (p.country) rows.push(['国', p.country]);
+  if (p.agency) rows.push(['所属機関', p.agency]);
+  if (p.position) rows.push(['役職', p.position]);
+  if (p.spacecraft || p.craft) rows.push(['搭乗機', p.spacecraft || p.craft]);
+  if (p.launched) {
+    const d = new Date(p.launched * 1000);
+    rows.push(['打上げ日', d.toLocaleDateString('ja-JP')]);
+  }
+  if (typeof p.days_in_space === 'number') rows.push(['宇宙滞在日数', `${p.days_in_space}日`]);
+
+  const links = [];
+  if (p.url) links.push(`<a href="${p.url}" target="_blank" rel="noopener">Wikipedia ↗</a>`);
+  if (p.twitter) links.push(`<a href="${p.twitter}" target="_blank" rel="noopener">X (Twitter) ↗</a>`);
+  if (p.instagram) links.push(`<a href="${p.instagram}" target="_blank" rel="noopener">Instagram ↗</a>`);
+  if (!p.url && !p.twitter && !p.instagram) {
+    links.push(`<a href="https://ja.wikipedia.org/wiki/${encodeURIComponent(p.name)}" target="_blank" rel="noopener">Wikipediaで検索 ↗</a>`);
+  }
+
+  els.crewModalBody.innerHTML = `
+    ${p.image ? `<img class="crew-detail-photo" src="${p.image}" alt="${escapeHtml(p.name)}">` : ''}
+    <div class="crew-detail-name">${escapeHtml(p.name)}</div>
+    <div class="crew-detail-role">${escapeHtml(p.position || p.agency || 'ISS クルー')}</div>
+    ${rows.length ? `<div class="crew-detail-rows">${rows.map(([k, v]) => `
+      <div class="crew-detail-row"><span>${escapeHtml(k)}</span><span>${escapeHtml(String(v))}</span></div>
+    `).join('')}</div>` : '<p class="hint">この人物の詳細データは取得元から提供されていません。</p>'}
+    <div class="crew-detail-links">${links.join('')}</div>
+  `;
+  els.crewModalOverlay.hidden = false;
+  els.crewModalClose.focus();
+}
+
+function closeCrewModal() {
+  els.crewModalOverlay.hidden = true;
+}
+
+els.crewList?.addEventListener('click', (e) => {
+  const item = e.target.closest('li[data-index]');
+  if (item) openCrewModal(Number(item.dataset.index));
+});
+els.crewList?.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const item = e.target.closest('li[data-index]');
+  if (item) { e.preventDefault(); openCrewModal(Number(item.dataset.index)); }
+});
+els.crewModalClose?.addEventListener('click', closeCrewModal);
+els.crewModalOverlay?.addEventListener('click', (e) => {
+  if (e.target === els.crewModalOverlay) closeCrewModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !els.crewModalOverlay.hidden) closeCrewModal();
+});
 
 /* ---------------- 打上げ一覧 ---------------- */
 let allLaunches = [];
@@ -156,11 +219,11 @@ els.locateBtn?.addEventListener('click', () => {
   navigator.geolocation.getCurrentPosition(pos => {
     const { latitude, longitude } = pos.coords;
     const tz = -new Date().getTimezoneOffset() / 60;
-    const url = `https://www.heavens-above.com/StarlinkTrainList.aspx?lat=${latitude.toFixed(4)}&lng=${longitude.toFixed(4)}&loc=Unspecified&alt=0&tz=${tz}`;
+    const url = `https://www.heavens-above.com/StarlinkLaunchPasses.aspx?lat=${latitude.toFixed(4)}&lng=${longitude.toFixed(4)}&loc=Unspecified&alt=0&tz=${tz}`;
     els.starlinkResult.innerHTML = `
       <div class="pass">
-        現在地（緯度 ${latitude.toFixed(2)}°, 経度 ${longitude.toFixed(2)}°）に基づく、
-        今夜のStarlink可視パスをHeavens-Aboveで確認できます。
+        現在地（緯度 ${latitude.toFixed(2)}°, 経度 ${longitude.toFixed(2)}°）に基づいて、
+        直近のStarlink打ち上げ機群が列車状に見える可視パスをHeavens-Aboveで確認できます。
       </div>
       <p style="margin-top:10px;"><a href="${url}" target="_blank" rel="noopener" class="btn-secondary" style="display:inline-block; text-decoration:none;">可視パス一覧を開く ↗</a></p>
     `;

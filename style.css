@@ -192,9 +192,46 @@ button{font-family:var(--font-body);}
 .crew-list li{
   background:var(--bg-card); border:1px solid var(--line); border-radius:var(--radius);
   padding:14px; font-size:14px;
+  cursor:pointer; transition:border-color .2s ease, transform .15s ease;
 }
+.crew-list li:hover, .crew-list li:focus-visible{border-color:var(--gold); transform:translateY(-1px);}
 .crew-list .name{font-weight:600; display:block; margin-bottom:2px;}
 .crew-list .craft{color:var(--text-dim); font-size:12px;}
+
+/* crew detail modal */
+.modal-overlay{
+  position:fixed; inset:0; z-index:100;
+  background:rgba(4,7,14,.72); backdrop-filter:blur(4px);
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+}
+.modal{
+  position:relative; width:min(440px, 100%);
+  background:var(--bg-card); border:1px solid var(--line); border-radius:var(--radius);
+  padding:28px 24px 24px;
+  max-height:85vh; overflow-y:auto;
+}
+.modal-close{
+  position:absolute; top:14px; right:14px;
+  background:transparent; border:0; color:var(--text-dim); font-size:16px; cursor:pointer;
+  width:32px; height:32px; border-radius:50%;
+}
+.modal-close:hover{background:var(--bg-elev); color:var(--text);}
+.crew-detail-photo{
+  width:88px; height:88px; border-radius:50%; object-fit:cover;
+  border:2px solid var(--gold); display:block; margin-bottom:14px;
+}
+.crew-detail-name{font-family:var(--font-display); font-size:20px; font-weight:600; margin-bottom:2px;}
+.crew-detail-role{color:var(--cyan); font-size:13px; margin-bottom:16px;}
+.crew-detail-rows{display:flex; flex-direction:column; gap:10px; margin-bottom:16px;}
+.crew-detail-row{display:flex; justify-content:space-between; font-size:13px; border-bottom:1px solid var(--line); padding-bottom:8px;}
+.crew-detail-row span:first-child{color:var(--text-dim);}
+.crew-detail-links{display:flex; gap:10px; flex-wrap:wrap;}
+.crew-detail-links a{
+  font-size:12px; color:var(--gold); text-decoration:none; border:1px solid var(--gold-dim);
+  border-radius:999px; padding:6px 12px;
+}
+.crew-detail-links a:hover{background:rgba(232,181,79,.1);}
 
 /* launches */
 .filter-row{display:flex; gap:8px;}
