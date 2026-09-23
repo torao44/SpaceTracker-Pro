@@ -1,6 +1,12 @@
 /* ==========================================================
    SpaceTracker Pro - app.js
    ISS位置・クルー・打上げ・Starlink可視予報・オーロラ・流星群・PWA
+
+   ※ 地球儀（球体表示）を廃止し、正距円筒図法のフラットな世界地図に変更。
+      - 海＋大陸（Natural Earth / world-atlas）をSVGで描画
+      - 前後約100分の地上軌道を連続曲線＋セグメント点で表示
+      - 現在位置は「ピン付きマーカー」で表示
+      - 日付変更線（±180°）をまたぐ部分も3枚重ね描きでシームレスに表示
    ========================================================== */
 
 const els = {
@@ -8,7 +14,6 @@ const els = {
   altitude: document.getElementById('altitude'),
   lat: document.getElementById('lat'),
   lon: document.getElementById('lon'),
-  issDot: document.getElementById('issDot'),
   globeCaption: document.getElementById('globeCaption'),
   refreshBtn: document.getElementById('refreshBtn'),
   crewList: document.getElementById('crewList'),
@@ -25,38 +30,28 @@ const els = {
   crewModalOverlay: document.getElementById('crewModalOverlay'),
   crewModalClose: document.getElementById('crewModalClose'),
   crewModalBody: document.getElementById('crewModalBody'),
+  // --- 世界地図まわり（新規） ---
+  mapLand: document.getElementById('mapLand'),
+  mapGraticule: document.getElementById('mapGraticule'),
+  trackLayer: document.getElementById('trackLayer'),
+  issMarker: document.getElementById('issMarker'),
 };
 
-/* ---------------- ISS 現在位置・航跡 ---------------- */
-const GLOBE_FRONT_LON = 0; // 正面から見たときに中心にくる経度（グリニッジ基準）
+/* ---------------- ISS 現在位置・地上軌道（正距円筒図法） ----------------
+   SVGの viewBox は 0 0 360 180。
+   経度 -180..180 → x 0..360 ／ 緯度 90..-90 → y 0..180 に線形対応させる。 */
+const MAP_W = 360;
+const MAP_H = 180;
 
-function project(lat, lon) {
-  const latRad = lat * Math.PI / 180;
-  const lonRad = (lon - GLOBE_FRONT_LON) * Math.PI / 180;
-  return {
-    u: Math.cos(latRad) * Math.sin(lonRad),
-    v: -Math.sin(latRad),
-    visible: Math.cos(latRad) * Math.cos(lonRad) > 0,
-  };
+function mapPoint(lat, lon) {
+  return { x: lon + 180, y: 90 - lat };
 }
 
-function updateGlobeDot(lat, lon) {
-  const core = document.querySelector('.globe-core');
-  if (!core || !els.issDot) return;
-  const rect = core.getBoundingClientRect();
-  if (!rect.width) return;
-
-  const R = (rect.width / 2) * 0.88; // 球の縁より少し内側に配置
-  const { u, v, visible } = project(lat, lon);
-  const x = u * R;
-  const y = v * R;
-
-  els.issDot.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
-  els.issDot.style.opacity = visible ? '1' : '0.15';
-
-  if (els.globeCaption) {
-    els.globeCaption.textContent = visible ? '' : '現在ISSは地球の裏側を飛行中です';
-  }
+function updateMapMarker(lat, lon) {
+  if (!els.issMarker) return;
+  const { x, y } = mapPoint(lat, lon);
+  els.issMarker.setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)})`);
+  els.issMarker.hidden = false;
 }
 
 async function loadISS() {
@@ -67,45 +62,104 @@ async function loadISS() {
     els.altitude.textContent = d.altitude.toFixed(1);
     els.lat.textContent = d.latitude.toFixed(2);
     els.lon.textContent = d.longitude.toFixed(2);
-    updateGlobeDot(d.latitude, d.longitude);
+    updateMapMarker(d.latitude, d.longitude);
+    if (els.globeCaption) {
+      const now = new Date();
+      els.globeCaption.textContent =
+        `最終更新 ${now.toLocaleTimeString('ja-JP')}（5秒ごとに自動更新）`;
+    }
   } catch (e) {
     console.error('ISS位置の取得に失敗', e);
   }
 }
 
-/* 直近の飛行経路（航跡）を、前後の時刻の位置をまとめて取得して描画する */
-const GROUND_TRACK_SPAN_MIN = 70;
-const GROUND_TRACK_STEP_MIN = 8;
+/* 地上軌道：前後 TRACK_SPAN_MIN 分ぶんの位置をまとめて取得して描画する。
+   セグメント点の間隔は画面右下の「segment: 5 min」表示と合わせている。 */
+const TRACK_SPAN_MIN = 100;   // 前後この分数（約1周＋α）を描く
+const SEGMENT_MIN = 5;        // セグメント点の間隔（分）
 
 async function loadGroundTrack() {
-  const trackEl = document.getElementById('groundTrack');
-  if (!trackEl) return;
+  if (!els.trackLayer) return;
   try {
     const now = Math.floor(Date.now() / 1000);
     const timestamps = [];
-    for (let m = -GROUND_TRACK_SPAN_MIN; m <= GROUND_TRACK_SPAN_MIN; m += GROUND_TRACK_STEP_MIN) {
+    for (let m = -TRACK_SPAN_MIN; m <= TRACK_SPAN_MIN; m += SEGMENT_MIN) {
       timestamps.push(now + m * 60);
     }
     const r = await fetch(`https://api.wheretheiss.at/v1/satellites/25544/positions?timestamps=${timestamps.join(',')}`);
     const list = await r.json();
-    if (!Array.isArray(list)) return;
+    if (!Array.isArray(list) || !list.length) return;
 
-    let d = '';
-    let drawing = false;
-    list.forEach(p => {
-      const { u, v, visible } = project(p.latitude, p.longitude);
-      const x = (50 + u * 46).toFixed(2);
-      const y = (50 + v * 46).toFixed(2);
-      if (visible) {
-        d += drawing ? ` L ${x} ${y}` : `M ${x} ${y}`;
-        drawing = true;
-      } else {
-        drawing = false;
+    // 経度を連続値に「ほどく」（日付変更線をまたぐと ±360 されるのを補正）
+    const pts = [];
+    let unLon = list[0].longitude;
+    list.forEach((p, i) => {
+      if (i > 0) {
+        let d = p.longitude - unLon;
+        while (d > 180) d -= 360;
+        while (d < -180) d += 360;
+        unLon += d;
       }
+      pts.push({ x: unLon + 180, y: 90 - p.latitude });
     });
-    trackEl.setAttribute('d', d);
+
+    // 連続した折れ線パスを1本作る
+    let d = `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
+    for (let i = 1; i < pts.length; i++) {
+      d += ` L ${pts[i].x.toFixed(2)} ${pts[i].y.toFixed(2)}`;
+    }
+
+    // セグメント点（画像の「segment: 5 min」に対応）
+    const dots = pts.map(p =>
+      `<rect class="track-dot" x="${(p.x - 1.3).toFixed(2)}" y="${(p.y - 1.3).toFixed(2)}" width="2.6" height="2.6" rx="0.4"/>`
+    ).join('');
+
+    const inner = `<path class="track-line" d="${d}"/>${dots}`;
+
+    // ±180°をまたぐ描画を継ぎ目なく見せるため、-360 / 0 / +360 の3枚重ねにする
+    els.trackLayer.innerHTML =
+      `<g clip-path="url(#mapClip)">` +
+        `<g transform="translate(-360 0)">${inner}</g>` +
+        `<g>${inner}</g>` +
+        `<g transform="translate(360 0)">${inner}</g>` +
+      `</g>`;
   } catch (e) {
-    console.warn('航跡の取得に失敗', e);
+    console.warn('地上軌道の取得に失敗', e);
+  }
+}
+
+/* ---------------- 世界地図（大陸の描画） ----------------
+   Natural Earth 由来の world-atlas（TopoJSON）をCDNから取得し、
+   d3-geo の正距円筒図法で SVG パスに変換して描画する。 */
+async function loadWorldMap() {
+  if (!els.mapLand) return;
+  if (typeof d3 === 'undefined' || typeof topojson === 'undefined') {
+    console.warn('地図ライブラリ(d3/topojson)が読み込まれていないため、大陸は描画しません');
+    return;
+  }
+  try {
+    const topo = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+      .then(r => r.json());
+
+    const projection = d3.geoEquirectangular()
+      .scale(180 / Math.PI)
+      .translate([MAP_W / 2, MAP_H / 2]);
+
+    const path = d3.geoPath(projection);
+
+    // 大陸・国境
+    const countries = topojson.feature(topo, topo.objects.countries);
+    els.mapLand.innerHTML = countries.features
+      .map(f => `<path d="${path(f)}"/>`)
+      .join('');
+
+    // 経緯線（30°間隔の薄いグリッド）
+    if (els.mapGraticule) {
+      const grat = d3.geoGraticule().step([30, 30]);
+      els.mapGraticule.innerHTML = `<path d="${path(grat())}"/>`;
+    }
+  } catch (e) {
+    console.warn('世界地図の取得に失敗', e);
   }
 }
 
@@ -413,6 +467,7 @@ function escapeHtml(str) {
 /* ---------------- 初期化 ---------------- */
 els.refreshBtn?.addEventListener('click', loadISS);
 
+loadWorldMap();
 loadISS();
 loadGroundTrack();
 loadCrew();
