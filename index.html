@@ -1,1 +1,154 @@
-<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SpaceTracker Pro</title><style>body{margin:0;background:#071021;color:#fff;font-family:system-ui}header{padding:18px;background:linear-gradient(135deg,#0ea5e9,#1d4ed8)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px}.card{background:#111827;border-radius:16px;padding:14px}.big{font-size:26px;font-weight:700}ul{padding-left:18px}button{background:#2563eb;color:#fff;border:0;border-radius:10px;padding:10px 14px}</style></head><body><header><h2>🛰 SpaceTracker Pro</h2><div>ISS・Starlink・Launch</div></header><div class="grid"><div class="card"><div>ISS速度</div><div id="speed" class="big">--</div></div><div class="card"><div>宇宙飛行士</div><div id="crewCount" class="big">--</div></div></div><div class="card" style="margin:12px"><h3>ISS現在位置</h3><p>緯度: <span id="lat">--</span></p><p>経度: <span id="lon">--</span></p><button onclick="loadISS()">更新</button></div><div class="card" style="margin:12px"><h3>ISSクルー</h3><ul id="crew"></ul></div><div class="card" style="margin:12px"><h3>次回ロケット打ち上げ</h3><div id="launch">読込中...</div></div><div class="card" style="margin:12px"><h3>Starlink</h3><p>今夜の可視予報（TLE計算）</p><p>18:47 / 19:03 / 19:28</p></div><div class="card" style="margin:12px"><h3>オーロラ</h3><p>Kp指数: 5</p></div><script>async function loadISS(){const r=await fetch("https://api.wheretheiss.at/v1/satellites/25544");const d=await r.json();lat.textContent=d.latitude.toFixed(2);lon.textContent=d.longitude.toFixed(2);speed.textContent=Math.round(d.velocity)+" km/h";}async function loadCrew(){const r=await fetch("https://api.open-notify.org/astros.json");const d=await r.json();const iss=d.people.filter(p=>p.craft==="ISS");crew.innerHTML="";iss.forEach(p=>crew.innerHTML+=`<li>${p.name}</li>`);crewCount.textContent=iss.length;}async function loadLaunch(){const r=await fetch("https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=1");const d=await r.json();const l=d.results[0];launch.innerHTML=`<b>${l.name}</b><br>${l.net}`;}loadISS();loadCrew();loadLaunch();setInterval(loadISS,5000);</script></body></html>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SpaceTracker Pro</title>
+<meta name="description" content="ISS・打上げ・オーロラ・流星群をリアルタイムに追跡するスペースダッシュボード">
+<meta name="theme-color" content="#070b14">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='46' fill='%23070b14'/%3E%3Ccircle cx='50' cy='50' r='30' fill='none' stroke='%23e8b54f' stroke-width='3'/%3E%3Ccircle cx='78' cy='50' r='5' fill='%234fd1e8'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="stars" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark"></span>
+    <span class="brand-text">SpaceTracker <em>Pro</em></span>
+  </div>
+  <nav class="tabs" aria-label="セクション">
+    <a href="#tracker" class="tab-link active">ISS</a>
+    <a href="#launches" class="tab-link">打上げ</a>
+    <a href="#sky" class="tab-link">星空</a>
+  </nav>
+  <button id="installBtn" class="btn-ghost" hidden>アプリを追加</button>
+</header>
+
+<main>
+
+  <!-- ===== HERO / ISS TRACKER ===== -->
+  <section id="tracker" class="hero">
+    <div class="globe-wrap" aria-hidden="true">
+      <div class="globe">
+        <div class="globe-ring r1"></div>
+        <div class="globe-ring r2"></div>
+        <div class="globe-core"></div>
+        <div class="iss-dot" id="issDot"></div>
+      </div>
+    </div>
+
+    <div class="hero-panel">
+      <div class="eyebrow">LIVE TRACKING</div>
+      <h1>国際宇宙ステーション (ISS)</h1>
+      <p class="sub">地球を90分で一周する有人宇宙ステーションの現在地を5秒ごとに更新します。</p>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-label">速度</span>
+          <span class="stat-value" id="speed">--</span>
+          <span class="stat-unit">km/h</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">高度</span>
+          <span class="stat-value" id="altitude">--</span>
+          <span class="stat-unit">km</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">緯度</span>
+          <span class="stat-value" id="lat">--</span>
+          <span class="stat-unit">°</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">経度</span>
+          <span class="stat-value" id="lon">--</span>
+          <span class="stat-unit">°</span>
+        </div>
+      </div>
+
+      <div class="hero-actions">
+        <button id="refreshBtn" class="btn-primary">今すぐ更新</button>
+        <span class="live-pill"><span class="dot"></span> 5秒ごとに自動更新</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CREW ===== -->
+  <section class="panel">
+    <div class="panel-head">
+      <h2>👨‍🚀 現在ISSに滞在中のクルー</h2>
+      <span class="count-pill" id="crewCount">--</span>
+    </div>
+    <ul class="crew-list" id="crewList">
+      <li class="skeleton"></li>
+      <li class="skeleton"></li>
+      <li class="skeleton"></li>
+    </ul>
+  </section>
+
+  <!-- ===== LAUNCHES ===== -->
+  <section id="launches" class="panel">
+    <div class="panel-head">
+      <h2>🚀 今後の打上げ</h2>
+      <div class="filter-row" id="agencyFilter">
+        <button class="chip active" data-agency="all">すべて</button>
+        <button class="chip" data-agency="spacex">SpaceX</button>
+        <button class="chip" data-agency="nasa">NASA</button>
+        <button class="chip" data-agency="jaxa">JAXA</button>
+      </div>
+    </div>
+    <div class="launch-list" id="launchList">
+      <div class="skeleton block"></div>
+      <div class="skeleton block"></div>
+      <div class="skeleton block"></div>
+    </div>
+  </section>
+
+  <section id="sky" class="grid-2">
+
+    <!-- ===== STARLINK ===== -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>🛰 Starlink 可視予報</h2>
+      </div>
+      <p class="hint">現在地を使って、今夜あなたの空でStarlinkの列が見えるタイミングを調べます。</p>
+      <button id="locateBtn" class="btn-secondary">現在地で調べる</button>
+      <div id="starlinkResult" class="result-box"></div>
+    </div>
+
+    <!-- ===== AURORA ===== -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>🌌 オーロラ（Kp指数）</h2>
+      </div>
+      <div class="kp-gauge">
+        <div class="kp-value" id="kpValue">--</div>
+        <div class="kp-bar"><div class="kp-fill" id="kpFill"></div></div>
+        <div class="kp-scale"><span>0</span><span>3</span><span>5</span><span>7</span><span>9</span></div>
+      </div>
+      <p class="kp-desc" id="kpDesc">データ取得中...</p>
+    </div>
+  </section>
+
+  <!-- ===== METEOR SHOWERS ===== -->
+  <section class="panel">
+    <div class="panel-head">
+      <h2>☄️ 主な流星群カレンダー</h2>
+    </div>
+    <div class="meteor-list" id="meteorList"></div>
+  </section>
+
+</main>
+
+<footer>
+  <p>データ提供: Where the ISS at?, Open Notify, The Space Devs (Launch Library 2), NOAA SWPC</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

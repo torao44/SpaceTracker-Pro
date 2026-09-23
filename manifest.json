@@ -1,0 +1,19 @@
+{
+  "name": "SpaceTracker Pro",
+  "short_name": "SpaceTracker",
+  "description": "ISS・打上げ・オーロラ・流星群をリアルタイムに追跡",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#070b14",
+  "theme_color": "#070b14",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='46' fill='%23070b14'/%3E%3Ccircle cx='50' cy='50' r='30' fill='none' stroke='%23e8b54f' stroke-width='3'/%3E%3Ccircle cx='78' cy='50' r='5' fill='%234fd1e8'/%3E%3C/svg%3E",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
