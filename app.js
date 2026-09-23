@@ -9,6 +9,7 @@ const els = {
   lat: document.getElementById('lat'),
   lon: document.getElementById('lon'),
   issDot: document.getElementById('issDot'),
+  globeCaption: document.getElementById('globeCaption'),
   refreshBtn: document.getElementById('refreshBtn'),
   crewList: document.getElementById('crewList'),
   crewCount: document.getElementById('crewCount'),
@@ -27,6 +28,30 @@ const els = {
 };
 
 /* ---------------- ISS 現在位置 ---------------- */
+const GLOBE_FRONT_LON = 0; // 正面から見たときに中心にくる経度（グリニッジ基準）
+
+function updateGlobeDot(lat, lon) {
+  const core = document.querySelector('.globe-core');
+  if (!core || !els.issDot) return;
+  const rect = core.getBoundingClientRect();
+  if (!rect.width) return;
+
+  const R = (rect.width / 2) * 0.88; // 球の縁より少し内側に配置
+  const latRad = lat * Math.PI / 180;
+  const lonRad = (lon - GLOBE_FRONT_LON) * Math.PI / 180;
+
+  const x = R * Math.cos(latRad) * Math.sin(lonRad);
+  const y = -R * Math.sin(latRad);
+  const isFront = Math.cos(latRad) * Math.cos(lonRad) > 0;
+
+  els.issDot.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+  els.issDot.style.opacity = isFront ? '1' : '0.15';
+
+  if (els.globeCaption) {
+    els.globeCaption.textContent = isFront ? '' : '現在ISSは地球の裏側を飛行中です';
+  }
+}
+
 async function loadISS() {
   try {
     const r = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
@@ -35,6 +60,7 @@ async function loadISS() {
     els.altitude.textContent = d.altitude.toFixed(1);
     els.lat.textContent = d.latitude.toFixed(2);
     els.lon.textContent = d.longitude.toFixed(2);
+    updateGlobeDot(d.latitude, d.longitude);
   } catch (e) {
     console.error('ISS位置の取得に失敗', e);
   }

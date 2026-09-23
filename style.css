@@ -118,20 +118,22 @@ button{font-family:var(--font-body);}
 .globe-ring.r1{animation:spin 18s linear infinite;}
 .globe-ring.r2{inset:6%; border-color:rgba(79,209,232,.25); animation:spin 26s linear infinite reverse;}
 .iss-dot{
-  position:absolute; top:8%; left:50%;
-  width:10px; height:10px; margin-left:-5px;
+  position:absolute; top:50%; left:50%;
+  width:10px; height:10px;
   border-radius:50%;
   background:var(--gold);
   box-shadow:0 0 12px 4px rgba(232,181,79,.7);
-  animation:orbit 12s linear infinite;
+  transform:translate(-50%,-50%);
+  transition:transform .8s ease, opacity .5s ease;
 }
 @keyframes spin{to{transform:rotate(360deg);}}
-@keyframes orbit{
-  from{transform:rotate(0deg) translateX(0) rotate(0deg);}
-  to{transform:rotate(360deg) translateX(0) rotate(-360deg);}
-}
 @media (prefers-reduced-motion:reduce){
-  .globe-ring, .iss-dot{animation:none;}
+  .globe-ring{animation:none;}
+  .iss-dot{transition:none;}
+}
+.globe-caption{
+  text-align:center; font-size:12px; color:var(--text-dim);
+  min-height:16px; margin:10px 0 0;
 }
 
 .hero-panel .eyebrow{
