@@ -129,38 +129,10 @@ async function loadGroundTrack() {
 }
 
 /* ---------------- 世界地図（大陸の描画） ----------------
-   Natural Earth 由来の world-atlas（TopoJSON）をCDNから取得し、
-   d3-geo の正距円筒図法で SVG パスに変換して描画する。 */
+   大陸パスは index.html に静的に埋め込まれているため、
+   外部CDN（d3-geo / topojson / world-atlas）への依存は不要。 */
 async function loadWorldMap() {
-  if (!els.mapLand) return;
-  if (typeof d3 === 'undefined' || typeof topojson === 'undefined') {
-    console.warn('地図ライブラリ(d3/topojson)が読み込まれていないため、大陸は描画しません');
-    return;
-  }
-  try {
-    const topo = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
-      .then(r => r.json());
-
-    const projection = d3.geoEquirectangular()
-      .scale(180 / Math.PI)
-      .translate([MAP_W / 2, MAP_H / 2]);
-
-    const path = d3.geoPath(projection);
-
-    // 大陸・国境
-    const countries = topojson.feature(topo, topo.objects.countries);
-    els.mapLand.innerHTML = countries.features
-      .map(f => `<path d="${path(f)}"/>`)
-      .join('');
-
-    // 経緯線（30°間隔の薄いグリッド）
-    if (els.mapGraticule) {
-      const grat = d3.geoGraticule().step([30, 30]);
-      els.mapGraticule.innerHTML = `<path d="${path(grat())}"/>`;
-    }
-  } catch (e) {
-    console.warn('世界地図の取得に失敗', e);
-  }
+  // 大陸は静的SVGとして既に描画済み。何もしない。
 }
 
 /* ---------------- ISSクルー ----------------
