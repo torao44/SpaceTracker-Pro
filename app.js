@@ -37,23 +37,53 @@ async function loadISS() {
   }
 }
 
-/* ---------------- ISSクルー ---------------- */
-async function loadCrew() {
+/* ---------------- ISSクルー ----------------
+   open-notify.org はダウンやCORSエラーが頻発するため、
+   より安定したミラー(corquaid/international-space-station-APIs)を優先し、
+   失敗した場合のみ open-notify にフォールバックする。 */
+async function fetchWithTimeout(url, ms = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
   try {
-    const r = await fetch('https://api.open-notify.org/astros.json');
-    const d = await r.json();
-    const iss = d.people.filter(p => p.craft === 'ISS');
-    els.crewCount.textContent = `${iss.length}名`;
-    els.crewList.innerHTML = iss.map(p => `
-      <li>
-        <span class="name">${escapeHtml(p.name)}</span>
-        <span class="craft">${escapeHtml(p.craft)} 搭乗中</span>
-      </li>
-    `).join('') || '<li>データがありません</li>';
-  } catch (e) {
-    els.crewList.innerHTML = '<li>クルー情報の取得に失敗しました</li>';
-    console.error('クルー取得失敗', e);
+    const r = await fetch(url, { signal: controller.signal });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+async function loadCrew() {
+  // 1) 安定版ミラー（HTTPS・CORS対応、GitHub Pages配信）
+  try {
+    const d = await fetchWithTimeout('https://corquaid.github.io/international-space-station-APIs/JSON/people-in-space.json');
+    const iss = (d.people || []).filter(p => p.iss === true || p.spacecraft?.includes('ISS'));
+    renderCrew(iss.length ? iss.map(p => ({ name: p.name, craft: p.spacecraft || 'ISS' })) : (d.people || []).map(p => ({ name: p.name, craft: p.spacecraft })));
+    return;
+  } catch (e) {
+    console.warn('ミラーAPIの取得に失敗、open-notifyへフォールバック', e);
+  }
+
+  // 2) フォールバック: open-notify（不安定な場合あり）
+  try {
+    const d = await fetchWithTimeout('https://api.open-notify.org/astros.json');
+    const iss = (d.people || []).filter(p => p.craft === 'ISS');
+    renderCrew(iss.map(p => ({ name: p.name, craft: p.craft })));
+  } catch (e) {
+    els.crewList.innerHTML = '<li>クルー情報を取得できませんでした。しばらくしてから再読み込みしてください。</li>';
+    els.crewCount.textContent = '--';
+    console.error('クルー取得失敗（両方のソース）', e);
+  }
+}
+
+function renderCrew(list) {
+  els.crewCount.textContent = `${list.length}名`;
+  els.crewList.innerHTML = list.map(p => `
+    <li>
+      <span class="name">${escapeHtml(p.name)}</span>
+      <span class="craft">${escapeHtml(p.craft || 'ISS')} 搭乗中</span>
+    </li>
+  `).join('') || '<li>データがありません</li>';
 }
 
 /* ---------------- 打上げ一覧 ---------------- */
@@ -61,7 +91,7 @@ let allLaunches = [];
 
 async function loadLaunches() {
   try {
-    const r = await fetch('https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=15&mode=normal');
+    const r = await fetch('https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=30&mode=normal');
     const d = await r.json();
     allLaunches = d.results || [];
     renderLaunches('all');
@@ -87,7 +117,7 @@ function renderLaunches(filter) {
     list = allLaunches.filter(l => agencyMatch(l, filter));
   }
   if (!list.length) {
-    els.launchList.innerHTML = '<p class="hint">該当する打上げ予定が見つかりませんでした</p>';
+    els.launchList.innerHTML = '<p class="hint">直近の予定にはありませんでした（このAPIが返す範囲は今後30件程度のため、日にちが空くこともあります）</p>';
     return;
   }
   els.launchList.innerHTML = list.slice(0, 8).map(l => {
