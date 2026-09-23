@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260923-2">
+<link rel="stylesheet" href="style.css?v=20260923-3">
 </head>
 <body>
 
@@ -38,7 +38,33 @@
       <div class="globe" aria-hidden="true">
         <div class="globe-ring r1"></div>
         <div class="globe-ring r2"></div>
-        <div class="globe-core"></div>
+        <div class="globe-core">
+          <svg class="globe-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+            <g class="graticule">
+              <ellipse cx="50" cy="50" rx="48" ry="18"/>
+              <ellipse cx="50" cy="50" rx="48" ry="34"/>
+              <path d="M50,2 C20,20 20,80 50,98"/>
+              <path d="M50,2 C80,20 80,80 50,98"/>
+              <path d="M50,2 L50,98"/>
+              <line x1="2" y1="50" x2="98" y2="50"/>
+            </g>
+            <g class="landmass">
+              <!-- Europe -->
+              <path d="M43,16 C47,14 53,15 55,18 C57,21 54,24 50,25 C46,26 41,24 41,20 C41,18 41,17 43,16 Z"/>
+              <!-- Africa + Middle East -->
+              <path d="M46,27 C54,26 62,29 65,35 C68,41 66,48 63,55 C61,62 60,70 56,76 C53,80 49,79 48,74 C46,66 44,58 43,50 C42,42 41,34 46,27 Z"/>
+              <!-- Asia (edge) -->
+              <path d="M66,16 C76,14 88,20 92,28 C94,34 90,40 84,38 C77,36 70,32 65,27 C63,23 64,19 66,16 Z"/>
+              <!-- South America -->
+              <path d="M20,44 C26,41 33,44 35,50 C37,58 36,68 32,78 C30,84 25,86 22,81 C19,74 17,64 17,55 C17,50 18,47 20,44 Z"/>
+              <!-- North America (edge) -->
+              <path d="M4,18 C12,14 22,16 27,22 C30,27 27,32 21,33 C14,34 6,31 3,26 C1,23 2,20 4,18 Z"/>
+              <!-- Greenland -->
+              <path d="M28,4 C33,3 38,5 39,9 C40,13 36,15 32,14 C28,13 26,9 28,4 Z"/>
+            </g>
+            <path class="ground-track" id="groundTrack" d=""/>
+          </svg>
+        </div>
         <div class="iss-dot" id="issDot"></div>
       </div>
       <p class="globe-caption" id="globeCaption"></p>
@@ -115,9 +141,9 @@
     <!-- ===== STARLINK ===== -->
     <div class="panel">
       <div class="panel-head">
-        <h2>🛰 Starlink 可視予報</h2>
+        <h2>🛰 Starlink・ISS 可視予報</h2>
       </div>
-      <p class="hint">現在地を使って、今夜あなたの空でStarlinkの列が見えるタイミングを調べます。</p>
+      <p class="hint">現在地を使って、Starlinkなどの人工衛星や、ISSが今後3日間で肉眼で見えるタイミングをHeavens-Aboveで調べます。</p>
       <button id="locateBtn" class="btn-secondary">現在地で調べる</button>
       <div id="starlinkResult" class="result-box"></div>
     </div>
@@ -148,10 +174,10 @@
 
 <footer>
   <p>データ提供: Where the ISS at?, Open Notify, The Space Devs (Launch Library 2), NOAA SWPC</p>
-  <p class="version-tag">Build: 2026-09-23-2</p>
+  <p class="version-tag">Build: 2026-09-23-3</p>
 </footer>
 
-<script src="app.js?v=20260923-2"></script>
+<script src="app.js?v=20260923-3"></script>
 
 <!-- ===== Crew Detail Modal ===== -->
 <div class="modal-overlay" id="crewModalOverlay" hidden>

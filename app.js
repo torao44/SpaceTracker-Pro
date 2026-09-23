@@ -27,8 +27,18 @@ const els = {
   crewModalBody: document.getElementById('crewModalBody'),
 };
 
-/* ---------------- ISS 現在位置 ---------------- */
+/* ---------------- ISS 現在位置・航跡 ---------------- */
 const GLOBE_FRONT_LON = 0; // 正面から見たときに中心にくる経度（グリニッジ基準）
+
+function project(lat, lon) {
+  const latRad = lat * Math.PI / 180;
+  const lonRad = (lon - GLOBE_FRONT_LON) * Math.PI / 180;
+  return {
+    u: Math.cos(latRad) * Math.sin(lonRad),
+    v: -Math.sin(latRad),
+    visible: Math.cos(latRad) * Math.cos(lonRad) > 0,
+  };
+}
 
 function updateGlobeDot(lat, lon) {
   const core = document.querySelector('.globe-core');
@@ -37,18 +47,15 @@ function updateGlobeDot(lat, lon) {
   if (!rect.width) return;
 
   const R = (rect.width / 2) * 0.88; // 球の縁より少し内側に配置
-  const latRad = lat * Math.PI / 180;
-  const lonRad = (lon - GLOBE_FRONT_LON) * Math.PI / 180;
-
-  const x = R * Math.cos(latRad) * Math.sin(lonRad);
-  const y = -R * Math.sin(latRad);
-  const isFront = Math.cos(latRad) * Math.cos(lonRad) > 0;
+  const { u, v, visible } = project(lat, lon);
+  const x = u * R;
+  const y = v * R;
 
   els.issDot.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
-  els.issDot.style.opacity = isFront ? '1' : '0.15';
+  els.issDot.style.opacity = visible ? '1' : '0.15';
 
   if (els.globeCaption) {
-    els.globeCaption.textContent = isFront ? '' : '現在ISSは地球の裏側を飛行中です';
+    els.globeCaption.textContent = visible ? '' : '現在ISSは地球の裏側を飛行中です';
   }
 }
 
@@ -63,6 +70,42 @@ async function loadISS() {
     updateGlobeDot(d.latitude, d.longitude);
   } catch (e) {
     console.error('ISS位置の取得に失敗', e);
+  }
+}
+
+/* 直近の飛行経路（航跡）を、前後の時刻の位置をまとめて取得して描画する */
+const GROUND_TRACK_SPAN_MIN = 70;
+const GROUND_TRACK_STEP_MIN = 8;
+
+async function loadGroundTrack() {
+  const trackEl = document.getElementById('groundTrack');
+  if (!trackEl) return;
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const timestamps = [];
+    for (let m = -GROUND_TRACK_SPAN_MIN; m <= GROUND_TRACK_SPAN_MIN; m += GROUND_TRACK_STEP_MIN) {
+      timestamps.push(now + m * 60);
+    }
+    const r = await fetch(`https://api.wheretheiss.at/v1/satellites/25544/positions?timestamps=${timestamps.join(',')}`);
+    const list = await r.json();
+    if (!Array.isArray(list)) return;
+
+    let d = '';
+    let drawing = false;
+    list.forEach(p => {
+      const { u, v, visible } = project(p.latitude, p.longitude);
+      const x = (50 + u * 46).toFixed(2);
+      const y = (50 + v * 46).toFixed(2);
+      if (visible) {
+        d += drawing ? ` L ${x} ${y}` : `M ${x} ${y}`;
+        drawing = true;
+      } else {
+        drawing = false;
+      }
+    });
+    trackEl.setAttribute('d', d);
+  } catch (e) {
+    console.warn('航跡の取得に失敗', e);
   }
 }
 
@@ -107,13 +150,23 @@ async function loadCrew() {
 
 let currentCrew = [];
 
+function initials(name) {
+  return String(name).trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+}
+
 function renderCrew(list) {
   currentCrew = list;
   els.crewCount.textContent = `${list.length}名`;
   els.crewList.innerHTML = list.map((p, i) => `
     <li data-index="${i}" tabindex="0" role="button" aria-haspopup="dialog">
-      <span class="name">${escapeHtml(p.name)}</span>
-      <span class="craft">${escapeHtml(p.spacecraft || p.craft || 'ISS')} 搭乗中</span>
+      ${p.image
+        ? `<img class="crew-avatar" src="${p.image}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'crew-avatar',textContent:'${initials(p.name)}'}))">`
+        : `<div class="crew-avatar">${initials(p.name)}</div>`
+      }
+      <div class="crew-text">
+        <span class="name">${escapeHtml(p.name)}</span>
+        <span class="craft">${escapeHtml(p.spacecraft || p.craft || 'ISS')} 搭乗中</span>
+      </div>
     </li>
   `).join('') || '<li>データがありません</li>';
 }
@@ -141,14 +194,20 @@ function openCrewModal(index) {
     links.push(`<a href="https://ja.wikipedia.org/wiki/${encodeURIComponent(p.name)}" target="_blank" rel="noopener">Wikipediaで検索 ↗</a>`);
   }
 
+  const photoHtml = p.image
+    ? `<img class="crew-detail-photo" src="${p.image}" alt="${escapeHtml(p.name)}" onerror="this.outerHTML='<div class=&quot;crew-detail-avatar-fallback&quot;>${initials(p.name)}</div>'">`
+    : `<div class="crew-detail-avatar-fallback">${initials(p.name)}</div>`;
+
   els.crewModalBody.innerHTML = `
-    ${p.image ? `<img class="crew-detail-photo" src="${p.image}" alt="${escapeHtml(p.name)}">` : ''}
-    <div class="crew-detail-name">${escapeHtml(p.name)}</div>
-    <div class="crew-detail-role">${escapeHtml(p.position || p.agency || 'ISS クルー')}</div>
-    ${rows.length ? `<div class="crew-detail-rows">${rows.map(([k, v]) => `
-      <div class="crew-detail-row"><span>${escapeHtml(k)}</span><span>${escapeHtml(String(v))}</span></div>
-    `).join('')}</div>` : '<p class="hint">この人物の詳細データは取得元から提供されていません。</p>'}
-    <div class="crew-detail-links">${links.join('')}</div>
+    ${photoHtml}
+    <div class="crew-detail-main">
+      <div class="crew-detail-name">${escapeHtml(p.name)}</div>
+      <div class="crew-detail-role">${escapeHtml(p.position || p.agency || 'ISS クルー')}</div>
+      ${rows.length ? `<div class="crew-detail-rows">${rows.map(([k, v]) => `
+        <div class="crew-detail-row"><span>${escapeHtml(k)}</span><span>${escapeHtml(String(v))}</span></div>
+      `).join('')}</div>` : '<p class="hint">この人物の詳細データは取得元から提供されていません。</p>'}
+      <div class="crew-detail-links">${links.join('')}</div>
+    </div>
   `;
   els.crewModalOverlay.hidden = false;
   els.crewModalClose.focus();
@@ -235,7 +294,11 @@ els.agencyFilter?.addEventListener('click', (e) => {
   renderLaunches(btn.dataset.agency);
 });
 
-/* ---------------- Starlink 可視予報（現在地ベース） ---------------- */
+/* ---------------- Starlink可視予報 & ISS可視パス（現在地ベース） ----------------
+   Heavens-Aboveは通過予測の計算に日没・薄明・軌道長期予報など複雑な天文計算が
+   必要なため自前実装はせず、現在地のクエリ付きで直接リンクする方式にしている。
+   (StarlinkLaunchPasses.aspx は直近に列車状のStarlink打上げがないとサーバー側で
+   エラーになることがあるため、より安定した main.aspx 経由に変更) */
 els.locateBtn?.addEventListener('click', () => {
   if (!('geolocation' in navigator)) {
     els.starlinkResult.innerHTML = '<p>このブラウザは位置情報に対応していません。</p>';
@@ -245,13 +308,18 @@ els.locateBtn?.addEventListener('click', () => {
   navigator.geolocation.getCurrentPosition(pos => {
     const { latitude, longitude } = pos.coords;
     const tz = -new Date().getTimezoneOffset() / 60;
-    const url = `https://www.heavens-above.com/StarlinkLaunchPasses.aspx?lat=${latitude.toFixed(4)}&lng=${longitude.toFixed(4)}&loc=Unspecified&alt=0&tz=${tz}`;
+    const lat = latitude.toFixed(4);
+    const lng = longitude.toFixed(4);
+    const mainUrl = `https://www.heavens-above.com/main.aspx?lat=${lat}&lng=${lng}&loc=Unnamed&alt=0&tz=${tz}`;
+    const issUrl = `https://www.heavens-above.com/PassSummary.aspx?satid=25544&lat=${lat}&lng=${lng}&loc=Unnamed&alt=0&tz=${tz}`;
     els.starlinkResult.innerHTML = `
       <div class="pass">
-        現在地（緯度 ${latitude.toFixed(2)}°, 経度 ${longitude.toFixed(2)}°）に基づいて、
-        直近のStarlink打ち上げ機群が列車状に見える可視パスをHeavens-Aboveで確認できます。
+        現在地（緯度 ${latitude.toFixed(2)}°, 経度 ${longitude.toFixed(2)}°）でHeavens-Aboveの通過予測を開きます。
       </div>
-      <p style="margin-top:10px;"><a href="${url}" target="_blank" rel="noopener" class="btn-secondary" style="display:inline-block; text-decoration:none;">可視パス一覧を開く ↗</a></p>
+      <div class="link-row">
+        <a href="${mainUrl}" target="_blank" rel="noopener" class="btn-secondary">Starlinkなど衛星一覧を見る ↗</a>
+        <a href="${issUrl}" target="_blank" rel="noopener" class="btn-secondary">ISSの可視パス（今後3日）を見る ↗</a>
+      </div>
     `;
   }, err => {
     els.starlinkResult.innerHTML = `<p>位置情報を取得できませんでした（${escapeHtml(err.message)}）。ブラウザの位置情報許可設定をご確認ください。</p>`;
@@ -330,10 +398,12 @@ function escapeHtml(str) {
 els.refreshBtn?.addEventListener('click', loadISS);
 
 loadISS();
+loadGroundTrack();
 loadCrew();
 loadLaunches();
 loadKp();
 renderMeteors();
 
 setInterval(loadISS, 5000);
+setInterval(loadGroundTrack, 5 * 60 * 1000); // 5分ごと
 setInterval(loadKp, 5 * 60 * 1000); // 5分ごと
