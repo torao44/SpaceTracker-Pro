@@ -15,9 +15,6 @@ const els = {
   agencyFilter: document.getElementById('agencyFilter'),
   locateBtn: document.getElementById('locateBtn'),
   starlinkResult: document.getElementById('starlinkResult'),
-  kpValue: document.getElementById('kpValue'),
-  kpFill: document.getElementById('kpFill'),
-  kpDesc: document.getElementById('kpDesc'),
   meteorList: document.getElementById('meteorList'),
   installBtn: document.getElementById('installBtn'),
   crewModalOverlay: document.getElementById('crewModalOverlay'),
@@ -108,7 +105,7 @@ function renderCrew(list) {
       }
       <div class="crew-text">
         <span class="name">${escapeHtml(p.name)}</span>
-        <span class="craft">${escapeHtml(p.spacecraft || p.craft || 'ISS')} 搭乗中</span>
+        <span class="craft">${escapeHtml((p.country ? `${p.country} • ` : '') + (p.spacecraft || p.craft || 'ISS'))}</span>
       </div>
     </li>
   `).join('') || '<li>データがありません</li>';
@@ -613,27 +610,6 @@ els.locateBtn?.addEventListener('click', () => {
   acquireLocation(false);
 });
 
-/* ---------------- オーロラ Kp指数 ---------------- */
-async function loadKp() {
-  try {
-    const r = await fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
-    const d = await r.json();
-    // d[0] はヘッダー行、最後の行が最新データ [time_tag, Kp, ...]
-    const latest = d[d.length - 1];
-    const kp = parseFloat(latest[1]);
-    els.kpValue.textContent = kp.toFixed(1);
-    els.kpFill.style.width = `${Math.min(kp / 9 * 100, 100)}%`;
-    let desc = '静穏 - オーロラは高緯度地域のみ';
-    if (kp >= 7) desc = '大規模な磁気嵐 - 中緯度でもオーロラが見える可能性';
-    else if (kp >= 5) desc = '磁気嵐 - 高緯度〜一部中緯度でオーロラの可能性';
-    else if (kp >= 3) desc = 'やや活発 - 高緯度地域で観測しやすい状態';
-    els.kpDesc.textContent = desc;
-  } catch (e) {
-    els.kpDesc.textContent = 'Kp指数の取得に失敗しました';
-    console.error('Kp取得失敗', e);
-  }
-}
-
 /* ---------------- 流星群カレンダー（主要なものを固定データで表示） ---------------- */
 const METEOR_SHOWERS = [
   { name: 'しぶんぎ座流星群', peak: '1月上旬', rate: '最大 約120個/時' },
@@ -775,13 +751,11 @@ els.refreshBtn?.addEventListener('click', loadISS);
 loadISS();
 loadCrew();
 loadLaunches();
-loadKp();
 renderMeteors();
 updateCelestialUI();
 acquireLocation(true); // ページを開いたときに現在地を自動取得
 initGalaxyCanvas(); // ゆっくり動く銀河キャンバスの初期化
 
 setInterval(loadISS, 5000);
-setInterval(loadKp, 5 * 60 * 1000); // 5分ごと
 setInterval(updateCelestialUI, 60 * 1000); // 1分ごとに太陽・月情報を更新
 

@@ -142,30 +142,14 @@
     </div>
   </section>
 
-  <section id="sky" class="grid-2">
-
-    <!-- ===== STARLINK ===== -->
-    <div class="panel">
-      <div class="panel-head">
-        <h2>🛰 Starlink・ISS 可視予報</h2>
-      </div>
-      <p class="hint">現在地を使って、Starlinkなどの人工衛星や、ISSが今後3日間で肉眼で見えるタイミングをHeavens-Aboveで調べます。</p>
-      <button id="locateBtn" class="btn-secondary">現在地で調べる</button>
-      <div id="starlinkResult" class="result-box"></div>
+  <!-- ===== STARLINK & ISS VISIBILITY ===== -->
+  <section id="sky" class="panel">
+    <div class="panel-head">
+      <h2>🛰 Starlink・ISS 可視予報</h2>
     </div>
-
-    <!-- ===== AURORA ===== -->
-    <div class="panel">
-      <div class="panel-head">
-        <h2>🌌 オーロラ（Kp指数）</h2>
-      </div>
-      <div class="kp-gauge">
-        <div class="kp-value" id="kpValue">--</div>
-        <div class="kp-bar"><div class="kp-fill" id="kpFill"></div></div>
-        <div class="kp-scale"><span>0</span><span>3</span><span>5</span><span>7</span><span>9</span></div>
-      </div>
-      <p class="kp-desc" id="kpDesc">データ取得中...</p>
-    </div>
+    <p class="hint">現在地を使って、Starlinkなどの人工衛星や、ISSが今後肉眼で見える通過タイミングをHeavens-Aboveで調べます。</p>
+    <button id="locateBtn" class="btn-secondary">現在地を再取得</button>
+    <div id="starlinkResult" class="result-box"></div>
   </section>
 
   <!-- ===== METEOR SHOWERS ===== -->
@@ -179,8 +163,8 @@
 </main>
 
 <footer>
-  <p>データ提供: Where the ISS at?, Open Notify, The Space Devs (Launch Library 2), NOAA SWPC</p>
-  <p class="version-tag">Build: 2026-09-24-2</p>
+  <p>データ提供: Where the ISS at?, Open Notify, The Space Devs (Launch Library 2), Heavens-Above</p>
+  <p class="version-tag">Build: 2026-09-24-3</p>
 </footer>
 
 <script src="app.js?v=20260924-2" defer></script>
