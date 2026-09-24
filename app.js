@@ -31,6 +31,10 @@ const els = {
   celestialModalOverlay: document.getElementById('celestialModalOverlay'),
   celestialModalClose: document.getElementById('celestialModalClose'),
   celestialModalBody: document.getElementById('celestialModalBody'),
+  issPassesBox: document.getElementById('issPassesBox'),
+  issPassesLoc: document.getElementById('issPassesLoc'),
+  issPassesList: document.getElementById('issPassesList'),
+  issHeavensLink: document.getElementById('issHeavensLink'),
 };
 
 /* ---------------- ISS 現在位置 ----------------
@@ -46,6 +50,199 @@ async function loadISS() {
     els.lon.textContent = d.longitude.toFixed(2);
   } catch (e) {
     console.error('ISS位置の取得に失敗', e);
+  }
+}
+
+/* ---------------- ISS 肉眼可視通過予報（近3回分） ---------------- */
+let cachedISSTLE = null;
+const FALLBACK_ISS_TLE = {
+  line1: '1 25544U 98067A   26266.88389698  .00009434  00000+0  17760-3 0  9994',
+  line2: '2 25544  51.6318 171.6234 0004723 174.4397 185.6645 15.49253495587058'
+};
+
+async function getISSTLE() {
+  if (cachedISSTLE && Date.now() - cachedISSTLE.time < 3600 * 1000) return cachedISSTLE.data;
+  try {
+    const res = await fetch('https://api.wheretheiss.at/v1/satellites/25544/tles');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.line1 && data.line2) {
+        cachedISSTLE = { data, time: Date.now() };
+        return data;
+      }
+    }
+  } catch (e) {
+    console.warn('TLE API失敗、フォールバック使用', e);
+  }
+  return FALLBACK_ISS_TLE;
+}
+
+function azToCompass(deg) {
+  const norm = ((deg % 360) + 360) % 360;
+  const dirs = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'];
+  return dirs[Math.round(norm / 45) % 8];
+}
+
+function getSunAltDeg(date, lat, lon) {
+  const rad = Math.PI / 180;
+  const d = date.getTime() / 86400000 - 10957.5;
+  const L = (280.46 + 0.9856474 * d) % 360;
+  const g = ((357.528 + 0.9856003 * d) % 360) * rad;
+  const lambda = (L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * rad;
+  const eps = 23.439 * rad;
+  const sinDec = Math.sin(eps) * Math.sin(lambda);
+  const cosDec = Math.cos(Math.asin(sinDec));
+  const gmstDeg = (280.46061837 + 360.98564736629 * d) % 360;
+  const lmst = (gmstDeg + lon) * rad;
+  const ra = Math.atan2(Math.cos(eps) * Math.sin(lambda), Math.cos(lambda));
+  const ha = lmst - ra;
+  const sinAlt = Math.sin(lat * rad) * sinDec + Math.cos(lat * rad) * cosDec * Math.cos(ha);
+  return Math.asin(sinAlt) / rad;
+}
+
+let lastPassLat = null;
+let lastPassLon = null;
+
+async function loadISSPasses(lat, lon, cityName) {
+  if (!els.issPassesList) return;
+
+  if (els.issPassesLoc) {
+    els.issPassesLoc.textContent = `📍 ${cityName || '現在地'} 付近`;
+  }
+  if (els.issHeavensLink) {
+    els.issHeavensLink.href = `https://www.heavens-above.com/PassSummary.aspx?satid=25544&lat=${lat.toFixed(4)}&lng=${lon.toFixed(4)}&loc=${encodeURIComponent(cityName || 'My Location')}`;
+  }
+
+  // Avoid recalculating if coordinates haven't changed
+  if (lastPassLat === lat && lastPassLon === lon) return;
+  lastPassLat = lat;
+  lastPassLon = lon;
+
+  if (typeof window.satellite === 'undefined') {
+    els.issPassesList.innerHTML = `
+      <div class="pass-empty">
+        <a href="${els.issHeavensLink?.href || '#'}" target="_blank" rel="noopener" class="link-heavens">Heavens-Aboveで可視パス予報を開く ↗</a>
+      </div>
+    `;
+    return;
+  }
+
+  els.issPassesList.innerHTML = '<div class="pass-loading">軌道要素から可視パスを計算中...</div>';
+
+  try {
+    const tle = await getISSTLE();
+    const sat = window.satellite;
+    const satrec = sat.twoline2satrec(tle.line1, tle.line2);
+
+    const rad = Math.PI / 180;
+    const observerGd = {
+      latitude: lat * rad,
+      longitude: lon * rad,
+      height: 0.05
+    };
+
+    const now = new Date();
+    const stepSec = 25;
+    const maxSteps = (14 * 24 * 3600) / stepSec;
+
+    let inPass = false;
+    let currentPass = null;
+    const visiblePasses = [];
+
+    for (let i = 0; i < maxSteps; i++) {
+      const time = new Date(now.getTime() + i * stepSec * 1000);
+      const pv = sat.propagate(satrec, time);
+      if (!pv.position || typeof pv.position.x !== 'number') continue;
+
+      const gmst = sat.gstime(time);
+      const posEcf = sat.eciToEcf(pv.position, gmst);
+      const look = sat.ecfToLookAngles(observerGd, posEcf);
+      const elev = look.elevation * (180 / Math.PI);
+      const az = look.azimuth * (180 / Math.PI);
+
+      if (elev > 10) {
+        if (!inPass) {
+          inPass = true;
+          currentPass = {
+            start: time,
+            maxElev: elev,
+            maxElevTime: time,
+            startAz: az,
+            maxAz: az,
+            end: time,
+            endAz: az
+          };
+        } else if (currentPass) {
+          if (elev > currentPass.maxElev) {
+            currentPass.maxElev = elev;
+            currentPass.maxElevTime = time;
+            currentPass.maxAz = az;
+          }
+          currentPass.end = time;
+          currentPass.endAz = az;
+        }
+      } else {
+        if (inPass && currentPass) {
+          inPass = false;
+          if (currentPass.maxElev >= 15) {
+            const sunAlt = getSunAltDeg(currentPass.maxElevTime, lat, lon);
+            if (sunAlt <= -6 && sunAlt >= -36) {
+              const maxElevDeg = Math.round(currentPass.maxElev);
+              let quality = 'normal';
+              if (maxElevDeg >= 60) quality = 'perfect';
+              else if (maxElevDeg >= 35) quality = 'great';
+
+              visiblePasses.push({
+                dateStr: currentPass.maxElevTime.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' }),
+                startStr: currentPass.start.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+                endStr: currentPass.end.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+                maxElev: maxElevDeg,
+                startCompass: azToCompass(currentPass.startAz),
+                maxCompass: maxElevDeg >= 75 ? '天頂' : azToCompass(currentPass.maxAz),
+                endCompass: azToCompass(currentPass.endAz),
+                durMin: Math.max(1, Math.round((currentPass.end.getTime() - currentPass.start.getTime()) / 60000)),
+                quality
+              });
+
+              if (visiblePasses.length >= 3) break;
+            }
+          }
+          currentPass = null;
+        }
+      }
+    }
+
+    if (visiblePasses.length === 0) {
+      els.issPassesList.innerHTML = `
+        <div class="pass-empty">
+          今後14日以内に条件の良い可視通過がありません。<br>
+          <a href="${els.issHeavensLink?.href || '#'}" target="_blank" rel="noopener" class="link-heavens">Heavens-Aboveで全期間を確認 ↗</a>
+        </div>
+      `;
+      return;
+    }
+
+    els.issPassesList.innerHTML = visiblePasses.map(p => `
+      <div class="pass-card ${p.quality}">
+        <div class="pass-card-top">
+          <span class="pass-date">${p.dateStr}</span>
+          <span class="pass-badge">最大 ${p.maxElev}°</span>
+        </div>
+        <div class="pass-time">⏰ ${p.startStr} 〜 ${p.endStr}</div>
+        <div class="pass-route">
+          <span>🧭 ${p.startCompass} → ${p.maxCompass} → ${p.endCompass}</span>
+          <span>${p.durMin}分間</span>
+        </div>
+      </div>
+    `).join('');
+
+  } catch (err) {
+    console.error('可視パス計算エラー:', err);
+    els.issPassesList.innerHTML = `
+      <div class="pass-empty">
+        <a href="${els.issHeavensLink?.href || '#'}" target="_blank" rel="noopener" class="link-heavens">Heavens-Aboveで通過予報を見る ↗</a>
+      </div>
+    `;
   }
 }
 
@@ -465,6 +662,9 @@ function updateCelestialUI() {
       </div>
     `;
   }
+
+  // Update ISS visible passes for user location
+  loadISSPasses(userLocation.lat, userLocation.lon, userLocation.city);
 }
 
 async function acquireLocation(silent = false) {

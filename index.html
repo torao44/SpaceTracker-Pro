@@ -104,6 +104,21 @@
         </div>
       </div>
 
+      <!-- ISS 肉眼可視通過予定 近3回分 -->
+      <div class="iss-passes-box" id="issPassesBox">
+        <div class="iss-passes-head">
+          <div class="iss-passes-title-wrap">
+            <span class="iss-passes-title">🛰 ISS 肉眼可視通過予定（近3回）</span>
+            <span class="iss-passes-loc" id="issPassesLoc">📍 現在地 付近</span>
+          </div>
+          <a id="issHeavensLink" href="https://www.heavens-above.com/" target="_blank" rel="noopener" class="link-heavens">全予報 ↗</a>
+        </div>
+        <div class="iss-passes-list" id="issPassesList">
+          <div class="pass-loading">軌道要素から可視パスを計算中...</div>
+        </div>
+        <div class="pass-note">※ 日没後・日の出前の肉眼で見える予報です</div>
+      </div>
+
       <div class="hero-actions">
         <button id="refreshBtn" class="btn-primary">今すぐ更新</button>
         <span class="live-pill"><span class="dot"></span> 5秒ごとに自動更新</span>
@@ -167,7 +182,8 @@
   <p class="version-tag">Build: 2026-09-24-3</p>
 </footer>
 
-<script src="app.js?v=20260924-2" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@4.1.4/dist/satellite.min.js"></script>
+<script src="app.js?v=20260924-3" defer></script>
 
 <!-- ===== Crew Detail Modal ===== -->
 <div class="modal-overlay" id="crewModalOverlay" hidden>
