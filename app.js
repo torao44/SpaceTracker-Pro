@@ -34,7 +34,9 @@ const els = {
   issPassesBox: document.getElementById('issPassesBox'),
   issPassesLoc: document.getElementById('issPassesLoc'),
   issPassesList: document.getElementById('issPassesList'),
+  issPassCountdown: document.getElementById('issPassCountdown'),
   issHeavensLink: document.getElementById('issHeavensLink'),
+  nextLaunchHero: document.getElementById('nextLaunchHero'),
   skyLocBadge: document.getElementById('skyLocBadge'),
   skyLocCity: document.getElementById('skyLocCity'),
   skyLocCoords: document.getElementById('skyLocCoords'),
@@ -103,6 +105,100 @@ function getSunAltDeg(date, lat, lon) {
   const ha = lmst - ra;
   const sinAlt = Math.sin(lat * rad) * sinDec + Math.cos(lat * rad) * cosDec * Math.cos(ha);
   return Math.asin(sinAlt) / rad;
+}
+
+function renderPassRadar(pass, size = 68) {
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size * 0.42;
+
+  const getCoords = (azDeg, elevDeg) => {
+    const clampedElev = Math.max(0, Math.min(90, elevDeg));
+    const dist = r * ((90 - clampedElev) / 90);
+    const theta = (azDeg - 90) * (Math.PI / 180);
+    return {
+      x: (cx + dist * Math.cos(theta)).toFixed(1),
+      y: (cy + dist * Math.sin(theta)).toFixed(1),
+    };
+  };
+
+  const pStart = getCoords(pass.startAz, 10);
+  const midAz = pass.maxElev >= 75 ? pass.startAz : (pass.startAz + pass.endAz) / 2;
+  const pMax = getCoords(midAz, pass.maxElev);
+  const pEnd = getCoords(pass.endAz, 10);
+
+  const isGold = pass.quality === 'perfect';
+  const strokeColor = isGold ? '#e8b54f' : '#4fd1e8';
+
+  return `
+    <svg class="radar-svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${cx}" cy="${cy}" r="${r.toFixed(1)}" fill="#070c18" stroke="#1d2942" stroke-width="1"/>
+      <circle cx="${cx}" cy="${cy}" r="${(r * 0.5).toFixed(1)}" fill="none" stroke="#1d2942" stroke-width="0.8" stroke-dasharray="2 2"/>
+      <line x1="${cx}" y1="${(cy - r).toFixed(1)}" x2="${cx}" y2="${(cy + r).toFixed(1)}" stroke="#1d2942" stroke-width="0.7"/>
+      <line x1="${(cx - r).toFixed(1)}" y1="${cy}" x2="${(cx + r).toFixed(1)}" y2="${cy}" stroke="#1d2942" stroke-width="0.7"/>
+      <circle cx="${cx}" cy="${cy}" r="1.5" fill="#4fd1e8" opacity="0.6"/>
+      <text x="${cx}" y="${(cy - r - 2).toFixed(1)}" text-anchor="middle" fill="#e8b54f" font-size="7" font-weight="bold">N</text>
+      <text x="${(cx + r + 5).toFixed(1)}" y="${(cy + 2.5).toFixed(1)}" text-anchor="middle" fill="#8a99b3" font-size="6.5">E</text>
+      <text x="${cx}" y="${(cy + r + 8).toFixed(1)}" text-anchor="middle" fill="#8a99b3" font-size="6.5">S</text>
+      <text x="${(cx - r - 5).toFixed(1)}" y="${(cy + 2.5).toFixed(1)}" text-anchor="middle" fill="#8a99b3" font-size="6.5">W</text>
+      <path d="M ${pStart.x} ${pStart.y} Q ${pMax.x} ${pMax.y} ${pEnd.x} ${pEnd.y}" fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="${pStart.x}" cy="${pStart.y}" r="2" fill="#4ee08a"/>
+      <circle cx="${pMax.x}" cy="${pMax.y}" r="3" fill="${strokeColor}"/>
+      <circle cx="${pEnd.x}" cy="${pEnd.y}" r="2" fill="#ef4444"/>
+    </svg>
+  `;
+}
+
+let currentVisiblePasses = [];
+
+function updatePassCountdown() {
+  if (!els.issPassCountdown) return;
+  if (!currentVisiblePasses || currentVisiblePasses.length === 0) {
+    els.issPassCountdown.hidden = true;
+    return;
+  }
+
+  const next = currentVisiblePasses[0];
+  const nowMs = Date.now();
+  const startMs = next.startTime.getTime();
+  const endMs = next.endTime.getTime();
+
+  if (nowMs >= startMs && nowMs <= endMs) {
+    els.issPassCountdown.hidden = false;
+    els.issPassCountdown.className = 'pass-countdown-banner happening';
+    els.issPassCountdown.innerHTML = `
+      <span>🔥 現在頭上を通過中！夜空を見上げてください！</span>
+      <span style="font-weight:700;">最大仰角 ${next.maxElev}° (${next.maxCompass})</span>
+    `;
+    return;
+  }
+
+  const diff = startMs - nowMs;
+  if (diff <= 0) {
+    els.issPassCountdown.hidden = true;
+    return;
+  }
+
+  els.issPassCountdown.hidden = false;
+  els.issPassCountdown.className = 'pass-countdown-banner';
+
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+  let timeStr = '';
+  if (days > 0) timeStr += `${days}日 `;
+  timeStr += `${hours}時間 ${minutes}分 ${seconds}秒`;
+
+  els.issPassCountdown.innerHTML = `
+    <div style="display:flex; align-items:center; gap:6px;">
+      <span>⏱</span>
+      <span style="color:var(--text-dim); font-size:11px;">次回可視通過まで:</span>
+      <span class="pass-cd-val">${timeStr}</span>
+    </div>
+    <span style="color:var(--text-dim); font-size:11px;">${next.dateStr} ${next.startStr}</span>
+  `;
 }
 
 let lastPassLat = null;
@@ -194,8 +290,14 @@ async function loadISSPasses(lat, lon, cityName) {
             if (sunAlt <= -6 && sunAlt >= -36) {
               const maxElevDeg = Math.round(currentPass.maxElev);
               let quality = 'normal';
-              if (maxElevDeg >= 60) quality = 'perfect';
-              else if (maxElevDeg >= 35) quality = 'great';
+              let qualityLabel = '標準観測';
+              if (maxElevDeg >= 60) {
+                quality = 'perfect';
+                qualityLabel = '絶好の観測チャンス';
+              } else if (maxElevDeg >= 35) {
+                quality = 'great';
+                qualityLabel = '好条件';
+              }
 
               visiblePasses.push({
                 dateStr: currentPass.maxElevTime.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' }),
@@ -205,8 +307,14 @@ async function loadISSPasses(lat, lon, cityName) {
                 startCompass: azToCompass(currentPass.startAz),
                 maxCompass: maxElevDeg >= 75 ? '天頂' : azToCompass(currentPass.maxAz),
                 endCompass: azToCompass(currentPass.endAz),
+                startAz: currentPass.startAz,
+                maxAz: currentPass.maxAz,
+                endAz: currentPass.endAz,
+                startTime: currentPass.start,
+                endTime: currentPass.end,
                 durMin: Math.max(1, Math.round((currentPass.end.getTime() - currentPass.start.getTime()) / 60000)),
-                quality
+                quality,
+                qualityLabel
               });
 
               if (visiblePasses.length >= 3) break;
@@ -216,6 +324,9 @@ async function loadISSPasses(lat, lon, cityName) {
         }
       }
     }
+
+    currentVisiblePasses = visiblePasses;
+    updatePassCountdown();
 
     if (visiblePasses.length === 0) {
       els.issPassesList.innerHTML = `
@@ -233,10 +344,16 @@ async function loadISSPasses(lat, lon, cityName) {
           <span class="pass-date">${p.dateStr}</span>
           <span class="pass-badge">最大 ${p.maxElev}°</span>
         </div>
-        <div class="pass-time">⏰ ${p.startStr} 〜 ${p.endStr}</div>
+        <div class="pass-card-main">
+          ${renderPassRadar(p, 64)}
+          <div class="pass-info-col">
+            <div class="pass-time">⏰ ${p.startStr} 〜 ${p.endStr}</div>
+            <div class="pass-quality-tag">${p.qualityLabel}</div>
+            <div class="pass-dur">観測時間: 約${p.durMin}分間</div>
+          </div>
+        </div>
         <div class="pass-route">
-          <span>🧭 ${p.startCompass} → ${p.maxCompass} → ${p.endCompass}</span>
-          <span>${p.durMin}分間</span>
+          <span>🧭 ${p.startCompass} ↗ ${p.maxCompass} ↘ ${p.endCompass}</span>
         </div>
       </div>
     `).join('');
@@ -399,6 +516,35 @@ document.addEventListener('keydown', (e) => {
 /* ---------------- 打上げ一覧 ---------------- */
 let allLaunches = [];
 
+function getLaunchTMinus(netStr) {
+  if (!netStr) return null;
+  const nowMs = Date.now();
+  const targetMs = new Date(netStr).getTime();
+  const diff = targetMs - nowMs;
+  const isPast = diff < 0;
+  const absDiff = Math.abs(diff);
+
+  const days = Math.floor(absDiff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((absDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((absDiff % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((absDiff % (1000 * 60)) / 1000);
+
+  const sign = isPast ? 'T +' : 'T -';
+  let formatted = `${sign} `;
+  if (days > 0) formatted += `${days}d `;
+  formatted += `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+  return {
+    days,
+    hours,
+    minutes,
+    seconds,
+    isPast,
+    isImminent: !isPast && days === 0 && hours < 24,
+    formatted,
+  };
+}
+
 async function loadLaunches() {
   try {
     const r = await fetch('https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=30&mode=normal');
@@ -422,6 +568,58 @@ function agencyMatch(launch, key) {
 }
 
 function renderLaunches(filter) {
+  // Update Next Launch Hero Banner
+  const nextL = allLaunches.find(l => l.net && new Date(l.net).getTime() > Date.now()) || allLaunches[0];
+  if (nextL && nextL.net && els.nextLaunchHero) {
+    const tm = getLaunchTMinus(nextL.net);
+    if (tm) {
+      els.nextLaunchHero.hidden = false;
+      const netDate = new Date(nextL.net);
+      const netStr = netDate.toLocaleString('ja-JP', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const padName = nextL.pad?.location?.name || '';
+      els.nextLaunchHero.innerHTML = `
+        <div class="next-hero-info">
+          <div class="next-hero-tag">
+            <span class="next-tag-pill">NEXT MISSION</span>
+            <span class="next-hero-provider">${escapeHtml(nextL.launch_service_provider?.name || 'Rocket Launch')}</span>
+          </div>
+          <div class="next-hero-title">${escapeHtml(nextL.name || '')}</div>
+          <div class="next-hero-meta">
+            <span>⏰ ${escapeHtml(netStr)}</span>
+            ${padName ? `<span>📍 ${escapeHtml(padName)}</span>` : ''}
+          </div>
+        </div>
+        <div class="next-timer-cluster">
+          <div class="led-box">
+            <span class="led-val" id="ledDays">${String(tm.days).padStart(2, '0')}</span>
+            <span class="led-lbl">DAYS</span>
+          </div>
+          <span class="led-colon">:</span>
+          <div class="led-box">
+            <span class="led-val" id="ledHours">${String(tm.hours).padStart(2, '0')}</span>
+            <span class="led-lbl">HOURS</span>
+          </div>
+          <span class="led-colon">:</span>
+          <div class="led-box">
+            <span class="led-val" id="ledMins">${String(tm.minutes).padStart(2, '0')}</span>
+            <span class="led-lbl">MINS</span>
+          </div>
+          <span class="led-colon">:</span>
+          <div class="led-box">
+            <span class="led-val secs" id="ledSecs">${String(tm.seconds).padStart(2, '0')}</span>
+            <span class="led-lbl">SECS</span>
+          </div>
+        </div>
+      `;
+    }
+  }
+
   let list = allLaunches;
   if (filter !== 'all') {
     list = allLaunches.filter(l => agencyMatch(l, filter));
@@ -435,6 +633,7 @@ function renderLaunches(filter) {
     const dateStr = date ? date.toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '未定';
     const pad = l.pad?.location?.name || '';
     const provider = l.launch_service_provider?.name || '';
+    const tm = getLaunchTMinus(l.net);
     return `
       <div class="launch-item">
         <div>
@@ -442,11 +641,50 @@ function renderLaunches(filter) {
           <div class="name">${escapeHtml(l.name || '')}</div>
           <div class="meta">${escapeHtml(provider)}${pad ? ' ・ ' + escapeHtml(pad) : ''}</div>
         </div>
-        <span class="agency-tag">${escapeHtml(provider || '未定')}</span>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          ${tm ? `<span class="launch-tminus ${tm.isImminent ? 'imminent' : ''}" data-net="${escapeHtml(l.net || '')}">${tm.formatted}</span>` : ''}
+          <span class="agency-tag">${escapeHtml(provider || '未定')}</span>
+        </div>
       </div>
     `;
   }).join('');
 }
+
+function tickSecond() {
+  updatePassCountdown();
+
+  // Update Next Launch Hero LED numbers if present
+  if (els.nextLaunchHero && !els.nextLaunchHero.hidden) {
+    const nextL = allLaunches.find(l => l.net && new Date(l.net).getTime() > Date.now()) || allLaunches[0];
+    if (nextL?.net) {
+      const tm = getLaunchTMinus(nextL.net);
+      if (tm) {
+        const elDays = document.getElementById('ledDays');
+        const elHours = document.getElementById('ledHours');
+        const elMins = document.getElementById('ledMins');
+        const elSecs = document.getElementById('ledSecs');
+        if (elDays) elDays.textContent = String(tm.days).padStart(2, '0');
+        if (elHours) elHours.textContent = String(tm.hours).padStart(2, '0');
+        if (elMins) elMins.textContent = String(tm.minutes).padStart(2, '0');
+        if (elSecs) elSecs.textContent = String(tm.seconds).padStart(2, '0');
+      }
+    }
+  }
+
+  // Update launch item pill countdowns
+  document.querySelectorAll('.launch-tminus[data-net]').forEach(el => {
+    const net = el.getAttribute('data-net');
+    if (net) {
+      const tm = getLaunchTMinus(net);
+      if (tm) {
+        el.textContent = tm.formatted;
+        if (tm.isImminent) el.classList.add('imminent');
+        else el.classList.remove('imminent');
+      }
+    }
+  });
+}
+setInterval(tickSecond, 1000);
 
 els.agencyFilter?.addEventListener('click', (e) => {
   const btn = e.target.closest('.chip');

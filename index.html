@@ -63,6 +63,10 @@
 
   <!-- ===== HERO / ISS TRACKER ===== -->
   <section id="tracker" class="hero">
+    <div class="zone-badge-wrap">
+      <span class="zone-badge">ZONE 1 • ORBITAL STATIONS &amp; MISSIONS / 有人探査・軌道ミッション</span>
+    </div>
+
     <div class="globe-wrap">
       <div class="map-embed">
         <iframe
@@ -113,10 +117,12 @@
           </div>
           <a id="issHeavensLink" href="https://www.heavens-above.com/" target="_blank" rel="noopener" class="link-heavens">全予報 ↗</a>
         </div>
+        <!-- 次回可視通過までのリアルタイムカウントダウン -->
+        <div class="pass-countdown-banner" id="issPassCountdown" hidden></div>
         <div class="iss-passes-list" id="issPassesList">
           <div class="pass-loading">軌道要素から可視パスを計算中...</div>
         </div>
-        <div class="pass-note">※ 日没後・日の出前の肉眼で見える予報です</div>
+        <div class="pass-note">※ 日没後・日の出前の肉眼で見える予報です（N:北/E:東/S:南/W:西、中心は天頂90°）</div>
       </div>
 
       <div class="hero-actions">
@@ -142,7 +148,10 @@
   <!-- ===== LAUNCHES ===== -->
   <section id="launches" class="panel">
     <div class="panel-head">
-      <h2>🚀 今後の打上げ</h2>
+      <div>
+        <h2>🚀 今後のロケット打上げ</h2>
+        <p class="panel-sub">SpaceX、NASA、JAXA等のリアルタイム打上げ予定とカウントダウン</p>
+      </div>
       <div class="filter-row" id="agencyFilter">
         <button class="chip active" data-agency="all">すべて</button>
         <button class="chip" data-agency="spacex">SpaceX</button>
@@ -150,12 +159,21 @@
         <button class="chip" data-agency="jaxa">JAXA</button>
       </div>
     </div>
+
+    <!-- 次回打上げ T-マイナスカウントダウン ヒーローバナー -->
+    <div class="next-launch-hero" id="nextLaunchHero" hidden></div>
+
     <div class="launch-list" id="launchList">
       <div class="skeleton block"></div>
       <div class="skeleton block"></div>
       <div class="skeleton block"></div>
     </div>
   </section>
+
+  <!-- ===== ZONE DIVIDER (ゾーン2への切り替え境界) ===== -->
+  <div class="zone-divider">
+    <span class="zone-pill">🔭 ZONE 2 • NIGHT SKY OBSERVATION / 今夜の星空・肉眼観測ナビ</span>
+  </div>
 
   <!-- ===== STARLINK & ISS VISIBILITY (打ち上げ予定の直下に配置) ===== -->
   <section id="sky" class="panel">
@@ -194,11 +212,11 @@
 
 <footer>
   <p>データ提供: Where the ISS at?, Open Notify, The Space Devs (Launch Library 2), Heavens-Above</p>
-  <p class="version-tag">Build: 2026-09-24-3</p>
+  <p class="version-tag">Build: 2026-09-24-4</p>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/satellite.js@4.1.4/dist/satellite.min.js"></script>
-<script src="app.js?v=20260924-3" defer></script>
+<script src="app.js?v=20260924-4" defer></script>
 
 <!-- ===== Crew Detail Modal ===== -->
 <div class="modal-overlay" id="crewModalOverlay" hidden>
