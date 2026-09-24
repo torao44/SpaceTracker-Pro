@@ -332,3 +332,158 @@ footer{
 }
 
 :focus-visible{outline:2px solid var(--cyan); outline-offset:2px;}
+
+/* ===== Celestial Header Widget (赤枠部分) ===== */
+.celestial-widget{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  background:rgba(14,22,38,0.85);
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:5px 14px;
+  cursor:pointer;
+  transition:border-color .2s ease, box-shadow .2s ease, background .2s ease;
+  user-select:none;
+}
+.celestial-widget:hover{
+  border-color:rgba(232,181,79,.6);
+  box-shadow:0 0 16px rgba(232,181,79,.2);
+  background:rgba(19,29,51,0.95);
+}
+.moon-box{
+  position:relative;
+  width:32px;
+  height:32px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+.moon-graphic svg{
+  width:32px;
+  height:32px;
+  display:block;
+}
+.loc-dot{
+  position:absolute;
+  bottom:0;
+  right:0;
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:var(--gold);
+  border:1.5px solid var(--bg);
+}
+.loc-dot.active{
+  background:#4ee08a;
+  box-shadow:0 0 6px #4ee08a;
+}
+.celestial-info{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+.celestial-row{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  line-height:1.2;
+}
+.moon-age-text{
+  font-size:12px;
+  font-weight:600;
+  color:var(--gold);
+  font-family:var(--font-display);
+}
+.moon-name-text{
+  font-size:11px;
+  color:var(--text-dim);
+}
+.celestial-loc{
+  font-size:10px;
+  color:var(--text-dim);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width:110px;
+  margin-top:1px;
+}
+.celestial-divider{
+  width:1px;
+  height:20px;
+  background:var(--line);
+}
+.celestial-sun{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-size:12px;
+  color:var(--text);
+  font-family:var(--font-display);
+}
+.celestial-sun strong{
+  font-weight:600;
+  letter-spacing:.02em;
+}
+
+/* Celestial Modal Custom Styles */
+.celestial-modal-body{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  width:100%;
+}
+.c-hero-box{
+  background:var(--bg-elev);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:16px;
+  display:flex;
+  align-items:center;
+  gap:16px;
+}
+.c-sun-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.c-sun-card{
+  background:var(--bg-elev);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:12px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.c-sun-card .c-icon{font-size:24px;}
+.c-sun-card .c-val{font-size:18px; font-weight:700; font-family:var(--font-display); color:var(--text);}
+.c-sun-card .c-lbl{font-size:11px; color:var(--text-dim);}
+.c-preset-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:6px;
+  margin-top:8px;
+}
+.c-preset-btn{
+  background:var(--bg-card);
+  border:1px solid var(--line);
+  color:var(--text);
+  padding:6px;
+  border-radius:8px;
+  font-size:12px;
+  cursor:pointer;
+}
+.c-preset-btn:hover{background:var(--gold); color:#070b14;}
+
+@media (max-width:760px){
+  .celestial-sun{display:none;}
+  .celestial-divider{display:none;}
+  .moon-name-text{display:none;}
+}
+@media (max-width:540px){
+  .celestial-widget{padding:4px 8px;}
+  .celestial-loc{max-width:70px;}
+}
+

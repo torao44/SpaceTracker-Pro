@@ -23,6 +23,17 @@ const els = {
   crewModalOverlay: document.getElementById('crewModalOverlay'),
   crewModalClose: document.getElementById('crewModalClose'),
   crewModalBody: document.getElementById('crewModalBody'),
+  celestialWidget: document.getElementById('celestialWidget'),
+  moonGraphic: document.getElementById('moonGraphic'),
+  locDot: document.getElementById('locDot'),
+  moonAgeText: document.getElementById('moonAgeText'),
+  moonNameText: document.getElementById('moonNameText'),
+  celestialLoc: document.getElementById('celestialLoc'),
+  sunriseText: document.getElementById('sunriseText'),
+  sunsetText: document.getElementById('sunsetText'),
+  celestialModalOverlay: document.getElementById('celestialModalOverlay'),
+  celestialModalClose: document.getElementById('celestialModalClose'),
+  celestialModalBody: document.getElementById('celestialModalBody'),
 };
 
 /* ---------------- ISS 現在位置 ----------------
@@ -246,32 +257,360 @@ els.agencyFilter?.addEventListener('click', (e) => {
   renderLaunches(btn.dataset.agency);
 });
 
-/* ---------------- Starlink可視予報 & ISS可視パス（現在地ベース） ----------------
-   Heavens-Aboveは位置情報をセッション/Cookieで管理する仕組みのため、
-   シークレット（プライベート）ブラウジングだとCookieが保存されず、
-   正しいURLでもサーバー側エラーになることがある。
-   そのため深いリンクではなく、まずトップページを開いてもらう方式にしている。 */
-els.locateBtn?.addEventListener('click', () => {
-  if (!('geolocation' in navigator)) {
-    els.starlinkResult.innerHTML = '<p>このブラウザは位置情報に対応していません。</p>';
-    return;
+/* ---------------- 天体計算（日の出・日の入り・月齢・月相） ---------------- */
+let userLocation = {
+  lat: 35.6895,
+  lon: 139.6917,
+  city: '東京都',
+  isAuto: false,
+};
+
+function getJulianDay(date) {
+  return date.getTime() / 86400000 + 2440587.5;
+}
+
+function getSolarTimes(date, lat, lon) {
+  const rad = Math.PI / 180;
+  const deg = 180 / Math.PI;
+
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+
+  const a = Math.floor((14 - month) / 12);
+  const y = year + 4800 - a;
+  const m = month + 12 * a - 3;
+  const julianDate = day + Math.floor((153 * m + 2) / 5) + 365 * y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045;
+  const T = (julianDate - 2451545.0) / 36525;
+
+  let L0 = 280.46646 + T * (36000.76983 + 0.0003032 * T);
+  L0 = ((L0 % 360) + 360) % 360;
+
+  const M = 357.52911 + T * (35999.05029 - 0.0001537 * T);
+  const e = 0.016708634 - T * (0.000042037 + 0.0000001267 * T);
+
+  const C = Math.sin(M * rad) * (1.914602 - T * (0.004817 + 0.000014 * T)) +
+            Math.sin(2 * M * rad) * (0.019993 - 0.000101 * T) +
+            Math.sin(3 * M * rad) * 0.000289;
+
+  const trueLong = L0 + C;
+  const omega = 125.04 - 1934.136 * T;
+  const lambda = trueLong - 0.00569 - 0.00478 * Math.sin(omega * rad);
+  const eps0 = 23 + (26 + (21.448 - T * (46.815 + T * (0.00059 - T * 0.001813))) / 60) / 60;
+  const eps = eps0 + 0.00256 * Math.cos(omega * rad);
+  const delta = Math.asin(Math.sin(eps * rad) * Math.sin(lambda * rad));
+
+  const varY = Math.tan((eps / 2) * rad) * Math.tan((eps / 2) * rad);
+  const eqTime = 4 * deg * (
+    varY * Math.sin(2 * L0 * rad) -
+    2 * e * Math.sin(M * rad) +
+    4 * e * varY * Math.sin(M * rad) * Math.cos(2 * L0 * rad) -
+    0.5 * varY * varY * Math.sin(4 * L0 * rad) -
+    1.25 * e * e * Math.sin(2 * M * rad)
+  );
+
+  const zenith = 90.8333 * rad;
+  const cosH0 = (Math.cos(zenith) - Math.sin(lat * rad) * Math.sin(delta)) / (Math.cos(lat * rad) * Math.cos(delta));
+  const tzOffset = -date.getTimezoneOffset() / 60;
+  const solarNoon = 720 - (4 * lon) - eqTime + (tzOffset * 60);
+
+  if (cosH0 > 1) {
+    return { sunriseStr: '--:--', sunsetStr: '--:--', noonStr: formatMins(solarNoon), dayLenStr: '0h', isDay: false };
+  } else if (cosH0 < -1) {
+    return { sunriseStr: '沈まない', sunsetStr: '沈まない', noonStr: formatMins(solarNoon), dayLenStr: '24h', isDay: true };
   }
-  els.starlinkResult.innerHTML = '<p>現在地を取得中...</p>';
-  navigator.geolocation.getCurrentPosition(pos => {
-    const { latitude, longitude } = pos.coords;
+
+  const H0 = Math.acos(cosH0) * deg;
+  const sunriseMins = solarNoon - (H0 * 4);
+  const sunsetMins = solarNoon + (H0 * 4);
+  const dayLenMins = sunsetMins - sunriseMins;
+  const curMins = date.getHours() * 60 + date.getMinutes();
+  const isDay = curMins >= sunriseMins && curMins <= sunsetMins;
+
+  return {
+    sunriseStr: formatMins(sunriseMins),
+    sunsetStr: formatMins(sunsetMins),
+    noonStr: formatMins(solarNoon),
+    dayLenStr: `${Math.floor(dayLenMins / 60)}時間${Math.floor(dayLenMins % 60).toString().padStart(2, '0')}分`,
+    isDay,
+  };
+}
+
+function formatMins(m) {
+  const norm = ((m % 1440) + 1440) % 1440;
+  const h = Math.floor(norm / 60);
+  const min = Math.floor(norm % 60);
+  return `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+}
+
+function getMoonDetails(date = new Date()) {
+  const jd = getJulianDay(date);
+  const refJD = 2451549.260417; // 2000-01-06 18:14 UTC
+  const synodicMonth = 29.530588853;
+
+  const age = ((jd - refJD) % synodicMonth + synodicMonth) % synodicMonth;
+  const phaseAngle = (age / synodicMonth) * 2 * Math.PI;
+  const illumination = (1 - Math.cos(phaseAngle)) / 2;
+  const isWaxing = age < (synodicMonth / 2);
+
+  let phaseName = '新月';
+  if (age < 1.0 || age >= 28.5) phaseName = '新月';
+  else if (age < 2.5) phaseName = '既朔';
+  else if (age < 4.5) phaseName = '三日月';
+  else if (age < 6.8) phaseName = '眉月';
+  else if (age < 8.2) phaseName = '上弦の月';
+  else if (age < 11.5) phaseName = '十日夜';
+  else if (age < 13.5) phaseName = '十三夜';
+  else if (age < 14.5) phaseName = '待宵月';
+  else if (age < 15.5) phaseName = '満月';
+  else if (age < 16.5) phaseName = '十六夜';
+  else if (age < 17.5) phaseName = '立待月';
+  else if (age < 18.5) phaseName = '居待月';
+  else if (age < 19.5) phaseName = '寝待月';
+  else if (age < 21.5) phaseName = '更待月';
+  else if (age < 23.5) phaseName = '下弦の月';
+  else if (age < 27.0) phaseName = '有明月';
+  else phaseName = '三十日月';
+
+  const daysToFull = ((synodicMonth / 2) - age + synodicMonth) % synodicMonth;
+
+  return {
+    age: Math.round(age * 10) / 10,
+    rawAge: age,
+    illumination: Math.round(illumination * 100),
+    isWaxing,
+    phaseName,
+    daysToFull: Math.round(daysToFull * 10) / 10,
+  };
+}
+
+function renderMoonSVG(moon, size = 32) {
+  const r = 48;
+  const c = 50;
+  const phi = (moon.rawAge / 29.530588853) * 2 * Math.PI;
+  const termX = Math.abs(Math.cos(phi) * r);
+  const isGibbous = moon.illumination > 50;
+  const uid = Math.random().toString(36).slice(2, 7);
+
+  let path = '';
+  if (moon.illumination <= 1) {
+    path = '';
+  } else if (moon.illumination >= 99) {
+    path = `M ${c - r} ${c} A ${r} ${r} 0 1 0 ${c + r} ${c} A ${r} ${r} 0 1 0 ${c - r} ${c} Z`;
+  } else if (moon.isWaxing) {
+    const sweep = isGibbous ? 1 : 0;
+    path = `M ${c} ${c - r} A ${r} ${r} 0 0 1 ${c} ${c + r} A ${termX} ${r} 0 0 ${sweep} ${c} ${c - r} Z`;
+  } else {
+    const sweep = isGibbous ? 0 : 1;
+    path = `M ${c} ${c - r} A ${r} ${r} 0 0 0 ${c} ${c + r} A ${termX} ${r} 0 0 ${sweep} ${c} ${c - r} Z`;
+  }
+
+  return `
+    <svg viewBox="0 0 100 100" width="${size}" height="${size}" style="overflow:visible;">
+      <defs>
+        <radialGradient id="base-${uid}" cx="38%" cy="32%" r="65%">
+          <stop offset="0%" stop-color="#2c3a52"/>
+          <stop offset="100%" stop-color="#090f1b"/>
+        </radialGradient>
+        <radialGradient id="lit-${uid}" cx="${moon.isWaxing ? '65%' : '35%'}" cy="35%" r="70%">
+          <stop offset="0%" stop-color="#fffbf0"/>
+          <stop offset="35%" stop-color="#f3e5b8"/>
+          <stop offset="80%" stop-color="#d8b979"/>
+          <stop offset="100%" stop-color="#7a5b25"/>
+        </radialGradient>
+        <mask id="mask-${uid}">
+          <rect width="100" height="100" fill="black"/>
+          <path d="${path}" fill="white"/>
+        </mask>
+      </defs>
+      <circle cx="${c}" cy="${c}" r="${r}" fill="url(#base-${uid})" stroke="rgba(79,209,232,0.2)" stroke-width="1"/>
+      ${path ? `
+        <g mask="url(#mask-${uid})">
+          <circle cx="${c}" cy="${c}" r="${r}" fill="url(#lit-${uid})"/>
+          <circle cx="38" cy="48" r="3" fill="#e2d2a4" opacity="0.6"/>
+          <circle cx="58" cy="38" r="4.5" fill="#cca666" opacity="0.5"/>
+          <circle cx="50" cy="74" r="3" fill="#fff" opacity="0.7"/>
+        </g>
+      ` : ''}
+      <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(232,181,79,0.35)" stroke-width="1"/>
+    </svg>
+  `;
+}
+
+function updateCelestialUI() {
+  const now = new Date();
+  const solar = getSolarTimes(now, userLocation.lat, userLocation.lon);
+  const moon = getMoonDetails(now);
+
+  if (els.sunriseText) els.sunriseText.textContent = solar.sunriseStr;
+  if (els.sunsetText) els.sunsetText.textContent = solar.sunsetStr;
+  if (els.moonAgeText) els.moonAgeText.textContent = `月齢 ${moon.age.toFixed(1)}`;
+  if (els.moonNameText) els.moonNameText.textContent = moon.phaseName;
+  if (els.celestialLoc) els.celestialLoc.textContent = `📍 ${userLocation.city || `${userLocation.lat.toFixed(1)}°, ${userLocation.lon.toFixed(1)}°`}`;
+  if (els.moonGraphic) els.moonGraphic.innerHTML = renderMoonSVG(moon, 32);
+
+  if (els.locDot) {
+    if (userLocation.isAuto) els.locDot.classList.add('active');
+    else els.locDot.classList.remove('active');
+  }
+
+  // Update Starlink/ISS visibility section
+  if (els.starlinkResult) {
     els.starlinkResult.innerHTML = `
       <div class="pass">
-        現在地: 緯度 ${latitude.toFixed(2)}°, 経度 ${longitude.toFixed(2)}°<br>
-        Heavens-Aboveのトップページで、この緯度・経度を「Select from map」または検索欄に入力して場所を保存すると、
-        以降はISSやStarlinkの通過予測がそのまま使えるようになります（シークレットウィンドウでは保存されないのでご注意ください）。
+        現在地: <strong>${escapeHtml(userLocation.city || '現在地')}</strong>（緯度 ${userLocation.lat.toFixed(2)}°, 経度 ${userLocation.lon.toFixed(2)}°）<br>
+        ページを開いた時に現在地を取得しました。以下のHeavens-Aboveリンクで現在の座標における通過予測がすぐに確認できます。
       </div>
       <div class="link-row">
-        <a href="https://www.heavens-above.com/" target="_blank" rel="noopener" class="btn-secondary">Heavens-Aboveを開く ↗</a>
+        <a href="https://www.heavens-above.com/PassSummary.aspx?satid=25544&lat=${userLocation.lat.toFixed(4)}&lng=${userLocation.lon.toFixed(4)}&loc=${encodeURIComponent(userLocation.city || 'My Location')}" target="_blank" rel="noopener" class="btn-secondary">ISS 可視パス予報 ↗</a>
+        <a href="https://www.heavens-above.com/StarlinkLaunchPasses.aspx?lat=${userLocation.lat.toFixed(4)}&lng=${userLocation.lon.toFixed(4)}" target="_blank" rel="noopener" class="btn-secondary">Starlink 通過予測 ↗</a>
+        <a href="https://www.heavens-above.com/?lat=${userLocation.lat.toFixed(4)}&lng=${userLocation.lon.toFixed(4)}" target="_blank" rel="noopener" class="btn-ghost">Heavens-Above トップ ↗</a>
       </div>
     `;
-  }, err => {
-    els.starlinkResult.innerHTML = `<p>位置情報を取得できませんでした（${escapeHtml(err.message)}）。ブラウザの位置情報許可設定をご確認ください。</p>`;
+  }
+}
+
+async function acquireLocation(silent = false) {
+  if (!('geolocation' in navigator)) {
+    if (!silent && els.starlinkResult) {
+      els.starlinkResult.innerHTML = '<p class="hint">このブラウザは位置情報に対応していません。</p>';
+    }
+    updateCelestialUI();
+    return;
+  }
+
+  if (els.celestialLoc) els.celestialLoc.textContent = '📍 取得中...';
+
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    const { latitude, longitude } = pos.coords;
+    userLocation.lat = latitude;
+    userLocation.lon = longitude;
+    userLocation.isAuto = true;
+
+    try {
+      const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=ja`);
+      if (res.ok) {
+        const d = await res.json();
+        userLocation.city = d.locality || d.city || d.principalSubdivision || `${latitude.toFixed(1)}°, ${longitude.toFixed(1)}°`;
+      }
+    } catch (e) {
+      userLocation.city = `${latitude.toFixed(1)}°N, ${longitude.toFixed(1)}°E`;
+    }
+
+    updateCelestialUI();
+  }, (err) => {
+    console.warn('Geolocation error or declined:', err);
+    userLocation.isAuto = false;
+    updateCelestialUI();
+  }, { timeout: 8000, maximumAge: 300000 });
+}
+
+/* ---------------- Celestial Modal ---------------- */
+const C_PRESETS = [
+  { name: '札幌', lat: 43.0642, lon: 141.3469 },
+  { name: '仙台', lat: 38.2682, lon: 140.8694 },
+  { name: '東京', lat: 35.6895, lon: 139.6917 },
+  { name: '名古屋', lat: 35.1815, lon: 136.9066 },
+  { name: '大阪', lat: 34.6937, lon: 135.5023 },
+  { name: '広島', lat: 34.3853, lon: 132.4553 },
+  { name: '福岡', lat: 33.5904, lon: 130.4017 },
+  { name: '那覇', lat: 26.2124, lon: 127.6809 },
+];
+
+function openCelestialModal() {
+  const now = new Date();
+  const solar = getSolarTimes(now, userLocation.lat, userLocation.lon);
+  const moon = getMoonDetails(now);
+
+  els.celestialModalBody.innerHTML = `
+    <div class="celestial-modal-body">
+      <div style="font-family:var(--font-display); font-size:18px; font-weight:700; color:var(--text);">
+        🌌 現在地の天体インフォ
+      </div>
+
+      <!-- Moon Hero Card -->
+      <div class="c-hero-box">
+        <div style="background:#070b14; padding:8px; border-radius:16px; border:1px solid var(--line); flex-shrink:0;">
+          ${renderMoonSVG(moon, 72)}
+        </div>
+        <div>
+          <div style="color:var(--gold); font-size:13px; font-weight:600;">${moon.phaseName}</div>
+          <div style="font-family:var(--font-display); font-size:22px; font-weight:700; margin:2px 0;">月齢 ${moon.age.toFixed(1)}</div>
+          <div style="font-size:12px; color:var(--text-dim);">輝面比: <strong style="color:var(--text);">${moon.illumination}%</strong> ・ ${moon.isWaxing ? '満ちていく月' : '欠けていく月'}</div>
+          <div style="font-size:11px; color:var(--gold); margin-top:4px;">次の満月まで あと約 ${moon.daysToFull.toFixed(1)} 日</div>
+        </div>
+      </div>
+
+      <!-- Sun Cards -->
+      <div class="c-sun-grid">
+        <div class="c-sun-card">
+          <span class="c-icon">🌅</span>
+          <div>
+            <div class="c-lbl">日の出</div>
+            <div class="c-val">${solar.sunriseStr}</div>
+          </div>
+        </div>
+        <div class="c-sun-card">
+          <span class="c-icon">🌇</span>
+          <div>
+            <div class="c-lbl">日の入り</div>
+            <div class="c-val">${solar.sunsetStr}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Location row & City selector -->
+      <div style="background:var(--bg-elev); border:1px solid var(--line); border-radius:14px; padding:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-size:13px; font-weight:600;">📍 ${escapeHtml(userLocation.city)} (${userLocation.lat.toFixed(2)}°, ${userLocation.lon.toFixed(2)}°)</div>
+          <button id="modalLocBtn" class="btn-ghost" style="padding:4px 10px; font-size:11px;">GPS再取得</button>
+        </div>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:10px;">主要都市を選択:</div>
+        <div class="c-preset-grid">
+          ${C_PRESETS.map((c, i) => `
+            <button class="c-preset-btn" data-city-idx="${i}">${escapeHtml(c.name)}</button>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('modalLocBtn')?.addEventListener('click', () => {
+    acquireLocation(false);
   });
+
+  els.celestialModalBody.querySelectorAll('.c-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.cityIdx);
+      const c = C_PRESETS[idx];
+      if (c) {
+        userLocation.lat = c.lat;
+        userLocation.lon = c.lon;
+        userLocation.city = c.name;
+        userLocation.isAuto = false;
+        updateCelestialUI();
+        openCelestialModal();
+      }
+    });
+  });
+
+  els.celestialModalOverlay.hidden = false;
+  els.celestialModalClose?.focus();
+}
+
+function closeCelestialModal() {
+  if (els.celestialModalOverlay) els.celestialModalOverlay.hidden = true;
+}
+
+els.celestialWidget?.addEventListener('click', openCelestialModal);
+els.celestialModalClose?.addEventListener('click', closeCelestialModal);
+els.celestialModalOverlay?.addEventListener('click', (e) => {
+  if (e.target === els.celestialModalOverlay) closeCelestialModal();
+});
+
+/* ---------------- Starlink可視予報 & ISS可視パス（現在地ベース） ---------------- */
+els.locateBtn?.addEventListener('click', () => {
+  acquireLocation(false);
 });
 
 /* ---------------- オーロラ Kp指数 ---------------- */
@@ -350,6 +689,10 @@ loadCrew();
 loadLaunches();
 loadKp();
 renderMeteors();
+updateCelestialUI();
+acquireLocation(true); // ページを開いたときに現在地を自動取得
 
 setInterval(loadISS, 5000);
 setInterval(loadKp, 5 * 60 * 1000); // 5分ごと
+setInterval(updateCelestialUI, 60 * 1000); // 1分ごとに太陽・月情報を更新
+
