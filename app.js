@@ -681,6 +681,94 @@ function escapeHtml(str) {
   }[s]));
 }
 
+/* ---------------- 銀河星空キャンバス ---------------- */
+function initGalaxyCanvas() {
+  const canvas = document.getElementById('galaxyCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  let width = (canvas.width = window.innerWidth);
+  let height = (canvas.height = window.innerHeight);
+
+  window.addEventListener('resize', () => {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+    initStars();
+  });
+
+  const starCount = Math.floor((width * height) / 4500);
+  let stars = [];
+  const colors = ['#ffffff', '#eef2ff', '#dbeafe', '#fef08a', '#e0e7ff', '#c7d2fe', '#a5f3fc'];
+
+  function initStars() {
+    stars = [];
+    for (let i = 0; i < starCount; i++) {
+      const baseAlpha = Math.random() * 0.7 + 0.3;
+      stars.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        size: Math.random() < 0.85 ? Math.random() * 1.4 + 0.5 : Math.random() * 2.2 + 1.2,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        alpha: baseAlpha,
+        baseAlpha: baseAlpha,
+        twinkleSpeed: Math.random() * 0.02 + 0.005,
+        twinkleOffset: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+  initStars();
+
+  const dustCount = 80;
+  const dustParticles = [];
+  const maxRadius = Math.max(width, height) * 0.75;
+  for (let i = 0; i < dustCount; i++) {
+    const radius = Math.pow(Math.random(), 0.7) * maxRadius;
+    dustParticles.push({
+      radius: radius,
+      angle: Math.random() * Math.PI * 2,
+      speed: (0.00015 + (1 - radius / maxRadius) * 0.0002),
+      size: Math.random() * 2.5 + 1.0,
+      color: i % 3 === 0 ? 'rgba(232, 181, 79, ' : i % 3 === 1 ? 'rgba(79, 209, 232, ' : 'rgba(192, 132, 252, ',
+      alpha: Math.random() * 0.4 + 0.2,
+    });
+  }
+
+  let time = 0;
+  function render() {
+    time++;
+    ctx.clearRect(0, 0, width, height);
+
+    for (let i = 0; i < stars.length; i++) {
+      const s = stars[i];
+      const a = s.baseAlpha * (0.6 + 0.4 * Math.sin(time * s.twinkleSpeed + s.twinkleOffset));
+      ctx.fillStyle = s.color;
+      ctx.globalAlpha = Math.max(0.1, Math.min(1, a));
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const cx = width * 0.5;
+    const cy = height * 0.42;
+    for (let i = 0; i < dustParticles.length; i++) {
+      const d = dustParticles[i];
+      d.angle += d.speed;
+      const x = cx + Math.cos(d.angle) * d.radius;
+      const y = cy + Math.sin(d.angle) * (d.radius * 0.45);
+      ctx.fillStyle = `${d.color}${d.alpha})`;
+      ctx.globalAlpha = d.alpha;
+      ctx.beginPath();
+      ctx.arc(x, y, d.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(render);
+  }
+  render();
+}
+
 /* ---------------- 初期化 ---------------- */
 els.refreshBtn?.addEventListener('click', loadISS);
 
@@ -691,6 +779,7 @@ loadKp();
 renderMeteors();
 updateCelestialUI();
 acquireLocation(true); // ページを開いたときに現在地を自動取得
+initGalaxyCanvas(); // ゆっくり動く銀河キャンバスの初期化
 
 setInterval(loadISS, 5000);
 setInterval(loadKp, 5 * 60 * 1000); // 5分ごと
