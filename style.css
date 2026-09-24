@@ -498,6 +498,55 @@ button{font-family:var(--font-body);}
 }
 .grid-2 .panel{padding:22px; margin:0; background:transparent;}
 
+/* Starlink & ISS Visibility Card */
+.sky-card{
+  background:rgba(14,22,38,0.92);
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:18px 20px;
+  margin-top:14px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:16px;
+  flex-wrap:wrap;
+  box-shadow:0 4px 16px rgba(0,0,0,0.25);
+}
+.sky-card-info{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.sky-loc-title{
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  font-size:16px;
+  font-weight:700;
+  color:var(--text);
+}
+.sky-coords{
+  font-size:12px;
+  color:var(--text-dim);
+  font-family:monospace;
+  font-weight:400;
+}
+.sky-desc{
+  font-size:12px;
+  color:var(--text-dim);
+}
+.sky-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.active-pill{
+  background:rgba(78,224,138,0.12) !important;
+  color:#4ee08a !important;
+  border-color:rgba(78,224,138,0.3) !important;
+}
+
 .result-box{margin-top:14px; font-size:14px; color:var(--text-dim);}
 .result-box .pass{
   background:var(--bg-card); border:1px solid var(--line); border-radius:12px;

@@ -35,6 +35,11 @@ const els = {
   issPassesLoc: document.getElementById('issPassesLoc'),
   issPassesList: document.getElementById('issPassesList'),
   issHeavensLink: document.getElementById('issHeavensLink'),
+  skyLocBadge: document.getElementById('skyLocBadge'),
+  skyLocCity: document.getElementById('skyLocCity'),
+  skyLocCoords: document.getElementById('skyLocCoords'),
+  skyStarlinkBtn: document.getElementById('skyStarlinkBtn'),
+  skyIssBtn: document.getElementById('skyIssBtn'),
 };
 
 /* ---------------- ISS 現在位置 ----------------
@@ -649,18 +654,22 @@ function updateCelestialUI() {
   }
 
   // Update Starlink/ISS visibility section
-  if (els.starlinkResult) {
-    els.starlinkResult.innerHTML = `
-      <div class="pass">
-        現在地: <strong>${escapeHtml(userLocation.city || '現在地')}</strong>（緯度 ${userLocation.lat.toFixed(2)}°, 経度 ${userLocation.lon.toFixed(2)}°）<br>
-        ページを開いた時に現在地を取得しました。以下のHeavens-Aboveリンクで現在の座標における通過予測がすぐに確認できます。
-      </div>
-      <div class="link-row">
-        <a href="https://www.heavens-above.com/PassSummary.aspx?satid=25544&lat=${userLocation.lat.toFixed(4)}&lng=${userLocation.lon.toFixed(4)}&loc=${encodeURIComponent(userLocation.city || 'My Location')}" target="_blank" rel="noopener" class="btn-secondary">ISS 可視パス予報 ↗</a>
-        <a href="https://www.heavens-above.com/StarlinkLaunchPasses.aspx?lat=${userLocation.lat.toFixed(4)}&lng=${userLocation.lon.toFixed(4)}" target="_blank" rel="noopener" class="btn-secondary">Starlink 通過予測 ↗</a>
-        <a href="https://www.heavens-above.com/?lat=${userLocation.lat.toFixed(4)}&lng=${userLocation.lon.toFixed(4)}" target="_blank" rel="noopener" class="btn-ghost">Heavens-Above トップ ↗</a>
-      </div>
-    `;
+  if (els.skyLocCity) els.skyLocCity.textContent = userLocation.city || '現在地';
+  if (els.skyLocCoords) els.skyLocCoords.textContent = `(${userLocation.lat.toFixed(2)}°, ${userLocation.lon.toFixed(2)}°)`;
+  if (els.skyLocBadge) {
+    if (userLocation.isAuto) {
+      els.skyLocBadge.textContent = '📍 GPS取得完了';
+      els.skyLocBadge.classList.add('active-pill');
+    } else {
+      els.skyLocBadge.textContent = '📍 現在地 (設定中)';
+      els.skyLocBadge.classList.remove('active-pill');
+    }
+  }
+  if (els.skyStarlinkBtn) {
+    els.skyStarlinkBtn.href = `https://www.heavens-above.com/StarlinkLaunchPasses.aspx?lat=${userLocation.lat.toFixed(4)}&lng=${userLocation.lon.toFixed(4)}&loc=${encodeURIComponent(userLocation.city || 'My Location')}`;
+  }
+  if (els.skyIssBtn) {
+    els.skyIssBtn.href = `https://www.heavens-above.com/PassSummary.aspx?satid=25544&lat=${userLocation.lat.toFixed(4)}&lng=${userLocation.lon.toFixed(4)}&loc=${encodeURIComponent(userLocation.city || 'My Location')}`;
   }
 
   // Update ISS visible passes for user location
@@ -669,14 +678,12 @@ function updateCelestialUI() {
 
 async function acquireLocation(silent = false) {
   if (!('geolocation' in navigator)) {
-    if (!silent && els.starlinkResult) {
-      els.starlinkResult.innerHTML = '<p class="hint">このブラウザは位置情報に対応していません。</p>';
-    }
     updateCelestialUI();
     return;
   }
 
   if (els.celestialLoc) els.celestialLoc.textContent = '📍 取得中...';
+  if (els.skyLocBadge) els.skyLocBadge.textContent = '📍 GPS取得中...';
 
   navigator.geolocation.getCurrentPosition(async (pos) => {
     const { latitude, longitude } = pos.coords;

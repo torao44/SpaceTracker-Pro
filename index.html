@@ -157,14 +157,29 @@
     </div>
   </section>
 
-  <!-- ===== STARLINK & ISS VISIBILITY ===== -->
+  <!-- ===== STARLINK & ISS VISIBILITY (打ち上げ予定の直下に配置) ===== -->
   <section id="sky" class="panel">
     <div class="panel-head">
-      <h2>🛰 Starlink・ISS 可視予報</h2>
+      <h2>🛰 Starlink・ISS 肉眼可視予定</h2>
+      <span class="count-pill active-pill" id="skyLocBadge">📍 現在地 自動取得中</span>
     </div>
-    <p class="hint">現在地を使って、Starlinkなどの人工衛星や、ISSが今後肉眼で見える通過タイミングをHeavens-Aboveで調べます。</p>
-    <button id="locateBtn" class="btn-secondary">現在地を再取得</button>
-    <div id="starlinkResult" class="result-box"></div>
+    <p class="hint">現在地（GPSまたは選択地点）の緯度・経度をもとに、夜空を横切るStarlink衛星のトレイン（隊列）やISSの可視通過予定をHeavens-Aboveでワンクリック検索できます。</p>
+
+    <div class="sky-card" id="skyCard">
+      <div class="sky-card-info">
+        <div class="sky-loc-title">
+          <span class="sky-pin">📍</span>
+          <span id="skyLocCity">東京都</span>
+          <span class="sky-coords" id="skyLocCoords">(35.69°, 139.69°)</span>
+        </div>
+        <p class="sky-desc">この位置情報をもとに通過予測URLがリアルタイムに更新されます。</p>
+      </div>
+      <div class="sky-actions">
+        <button id="locateBtn" class="btn-ghost" title="GPS現在地を再取得">🔄 GPS再取得</button>
+        <a id="skyStarlinkBtn" href="https://www.heavens-above.com/StarlinkLaunchPasses.aspx?lat=35.6895&lng=139.6917&loc=%E6%9D%B1%E4%BA%AC%E9%83%BD" target="_blank" rel="noopener" class="btn-secondary">Starlink 隊列通過予報 ↗</a>
+        <a id="skyIssBtn" href="https://www.heavens-above.com/PassSummary.aspx?satid=25544&lat=35.6895&lng=139.6917&loc=%E6%9D%B1%E4%BA%AC%E9%83%BD" target="_blank" rel="noopener" class="btn-primary">ISS 可視パス予報 ↗</a>
+      </div>
+    </div>
   </section>
 
   <!-- ===== METEOR SHOWERS ===== -->
