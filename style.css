@@ -1650,3 +1650,252 @@ footer{
   .celestial-loc{max-width:70px;}
 }
 
+/* ==========================================================
+   Today's Night Sky & AR Constellation Navigator (v1.5)
+   ========================================================== */
+.constel-time-bar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:8px;
+  background:var(--bg-card);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:8px 12px;
+  margin-bottom:16px;
+  font-size:12px;
+}
+.constel-time-info{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:var(--text-dim);
+}
+.constel-sim-badge{
+  font-size:10px;
+  background:rgba(232,181,79,0.15);
+  color:var(--gold);
+  border:1px solid rgba(232,181,79,0.3);
+  padding:1px 6px;
+  border-radius:4px;
+}
+.constel-time-presets{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.constel-layout{
+  display:grid;
+  grid-template-columns:360px 1fr;
+  gap:18px;
+  align-items:start;
+}
+@media (max-width:900px){
+  .constel-layout{
+    grid-template-columns:1fr;
+  }
+}
+.constel-dome-box{
+  background:#091120;
+  border:1px solid var(--line);
+  border-radius:20px;
+  padding:14px;
+  display:flex;
+  flex-col;
+  flex-direction:column;
+  align-items:center;
+}
+.dome-head{
+  width:100%;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  font-size:12px;
+  margin-bottom:8px;
+}
+.dome-title{
+  font-weight:bold;
+  color:var(--text);
+}
+.dome-count{
+  font-size:11px;
+  color:var(--cyan);
+  font-family:monospace;
+}
+.dome-canvas-wrap{
+  width:100%;
+  max-width:320px;
+  aspect-ratio:1/1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+#constelCanvas{
+  width:100%;
+  height:100%;
+  border-radius:50%;
+  cursor:pointer;
+  transition:transform 0.2s ease;
+}
+#constelCanvas:hover{
+  transform:scale(1.02);
+}
+.dome-footer{
+  width:100%;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  font-size:11px;
+  color:var(--text-dim);
+  border-top:1px solid rgba(255,255,255,0.06);
+  padding-top:8px;
+  margin-top:8px;
+}
+.constel-cards-box{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.constel-filters{
+  display:flex;
+  gap:6px;
+  overflow-x:auto;
+  padding-bottom:4px;
+}
+.constel-list{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
+  gap:10px;
+  max-height:440px;
+  overflow-y:auto;
+  padding-right:4px;
+}
+.constel-card{
+  background:var(--bg-card);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:12px;
+  cursor:pointer;
+  transition:all 0.2s ease;
+}
+.constel-card:hover{
+  border-color:rgba(79,209,232,0.6);
+  transform:translateY(-1px);
+}
+.constel-card.active{
+  border-color:var(--cyan);
+  box-shadow:0 0 12px rgba(79,209,232,0.2);
+}
+.constel-card-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:6px;
+}
+.constel-card-name{
+  font-size:13px;
+  font-weight:bold;
+  color:var(--text);
+}
+.constel-card-sub{
+  font-size:10px;
+  color:var(--text-dim);
+}
+.constel-vis-pill{
+  font-size:10px;
+  padding:1px 6px;
+  border-radius:10px;
+  white-space:nowrap;
+}
+.constel-vis-pill.visible{
+  background:rgba(78,224,138,0.15);
+  color:#4ee08a;
+  border:1px solid rgba(78,224,138,0.3);
+}
+.constel-vis-pill.hidden{
+  background:rgba(138,153,179,0.1);
+  color:var(--text-dim);
+  border:1px solid var(--line);
+}
+.constel-card-angles{
+  font-size:11px;
+  font-family:monospace;
+  color:var(--cyan);
+  margin-top:6px;
+}
+.constel-card-desc{
+  font-size:11px;
+  color:var(--text-dim);
+  line-height:1.4;
+  margin-top:6px;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+.constel-card-foot{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-top:8px;
+  padding-top:6px;
+  border-top:1px solid rgba(255,255,255,0.06);
+}
+.constel-star-name{
+  font-size:10px;
+  color:var(--gold);
+}
+.btn-card-constel-ar{
+  background:rgba(79,209,232,0.15);
+  border:1px solid rgba(79,209,232,0.4);
+  color:var(--cyan);
+  font-size:10px;
+  font-weight:600;
+  padding:3px 8px;
+  border-radius:6px;
+  cursor:pointer;
+  transition:all 0.15s ease;
+}
+.btn-card-constel-ar:hover{
+  background:var(--cyan);
+  color:#070b14;
+}
+
+/* Constellation AR Carousel at Bottom of AR Screen */
+.ar-constel-carousel{
+  position:absolute;
+  bottom:14px;
+  left:10px;
+  right:10px;
+  z-index:25;
+  display:flex;
+  gap:8px;
+  overflow-x:auto;
+  padding:4px 2px;
+  scrollbar-width:none;
+}
+.ar-constel-carousel::-webkit-scrollbar{display:none;}
+.ar-c-chip{
+  flex-shrink:0;
+  background:rgba(10,18,32,0.88);
+  backdrop-filter:blur(6px);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:6px 10px;
+  color:var(--text);
+  font-size:11px;
+  cursor:pointer;
+  transition:all 0.15s ease;
+  text-align:left;
+}
+.ar-c-chip.active{
+  border-color:var(--cyan);
+  background:rgba(79,209,232,0.2);
+  box-shadow:0 0 10px rgba(79,209,232,0.4);
+}
+.ar-c-chip strong{display:block; font-size:11px;}
+.ar-c-chip span{display:block; font-size:9.5px; color:var(--text-dim); font-family:monospace;}
+
+

@@ -204,6 +204,68 @@
     </div>
   </section>
 
+  <!-- ===== TODAY'S NIGHT SKY & REAL-TIME CONSTELLATIONS ===== -->
+  <section id="constellations" class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>✨ 今日の夜空・リアルタイム星座ナビ</h2>
+        <p class="panel-sub" id="constelSubLoc">📍 現在地から今見える星座と主要星のリアルタイム位置</p>
+      </div>
+      <button id="openConstelArBtn" class="btn-ar-nav" title="スマホを空に向けて星座を探す">
+        📱 空に向けて探す (ARナビ)
+      </button>
+    </div>
+
+    <!-- Time simulation bar -->
+    <div class="constel-time-bar">
+      <div class="constel-time-info">
+        <span class="pulse-dot"></span>
+        <span>計算時刻:</span>
+        <span id="constelTimeText" class="mono-bold">--:--</span>
+        <span id="constelSimBadge" class="constel-sim-badge" style="display:none;">シミュレーション</span>
+      </div>
+      <div class="constel-time-presets">
+        <button class="chip active" id="constelTimeNow">現在 (リアルタイム)</button>
+        <button class="chip" id="constelTime20">今夜 20:00</button>
+        <button class="chip" id="constelTime23">今夜 23:00</button>
+      </div>
+    </div>
+
+    <!-- 2-col layout: Dome + Cards -->
+    <div class="constel-layout">
+      <!-- Celestial Dome -->
+      <div class="constel-dome-box">
+        <div class="dome-head">
+          <span class="dome-title">🌌 全天星座マップ (天球図)</span>
+          <span class="dome-count" id="constelVisibleCount">現在 -- 星座が上昇</span>
+        </div>
+        <div class="dome-canvas-wrap">
+          <canvas id="constelCanvas" width="360" height="360"></canvas>
+        </div>
+        <div class="dome-footer">
+          <span>※ 外周=地平線、中心(+)=天頂</span>
+          <button id="openConstelArFromDome" class="link-btn">ARナビで開く ↗</button>
+        </div>
+      </div>
+
+      <!-- Constellation Cards & Filters -->
+      <div class="constel-cards-box">
+        <div class="constel-filters" id="constelFilters">
+          <button class="chip active" data-filter="visible">今見える星座</button>
+          <button class="chip" data-filter="all">全主要星座</button>
+          <button class="chip" data-filter="spring">春</button>
+          <button class="chip" data-filter="summer">夏</button>
+          <button class="chip" data-filter="autumn">秋</button>
+          <button class="chip" data-filter="winter">冬</button>
+        </div>
+
+        <div class="constel-list" id="constelList">
+          <!-- Populated by app.js -->
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ===== METEOR SHOWERS ===== -->
   <section class="panel">
     <div class="panel-head">
@@ -216,11 +278,11 @@
 
 <footer>
   <p>データ提供: Where the ISS at?, Open Notify, The Space Devs (Launch Library 2), Heavens-Above</p>
-  <p class="version-tag">Build: 2026-09-25 (v1.4.0 AR Sky Navigator)</p>
+  <p class="version-tag">Build: 2026-09-25 (v1.5.0 Today's Night Sky & AR Constellation Navigator)</p>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/satellite.js@4.1.4/dist/satellite.min.js"></script>
-<script src="app.js?v=20260925-ar1" defer></script>
+<script src="app.js?v=20260925-ar2" defer></script>
 
 <!-- ===== Crew Detail Modal ===== -->
 <div class="modal-overlay" id="crewModalOverlay" hidden>
@@ -362,6 +424,58 @@
         </div>
         <button id="arHelpConfirmBtn" class="btn-primary" style="width:100%;margin-top:12px;">了解しました</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Constellation AR Navigator Fullscreen Modal ===== -->
+<div class="ar-modal" id="arConstelModal" hidden>
+  <div class="ar-viewport" id="arConstelViewport">
+    <video id="arConstelVideo" playsinline muted autoplay class="ar-video" style="display:none;"></video>
+    <canvas id="arConstelCanvas" class="ar-canvas"></canvas>
+
+    <!-- Top HUD Toolbar -->
+    <div class="ar-top-bar">
+      <div class="ar-target-badge">
+        <span class="ar-target-icon">✨</span>
+        <div class="ar-target-meta">
+          <div class="ar-target-name" id="arConstelName">オリオン座</div>
+          <div class="ar-target-sub" id="arConstelSub">方位 180° • 高度 45°</div>
+        </div>
+      </div>
+      <div class="ar-tools">
+        <button id="arConstelCamBtn" class="ar-tool-btn" title="カメラAR / 仮想星空 切り替え">📷</button>
+        <button id="arConstelSoundBtn" class="ar-tool-btn" title="サウンド切替">🔔</button>
+        <button id="arConstelHelpBtn" class="ar-tool-btn" title="コンパス補正・ヘルプ">❓</button>
+        <button id="arConstelCloseBtn" class="ar-close-btn" title="ARナビを閉じる">✕</button>
+      </div>
+    </div>
+
+    <!-- Center Reticle & Lock-on Ring -->
+    <div class="ar-reticle-wrap" id="arConstelReticle">
+      <div class="ar-reticle-ring"></div>
+      <div class="ar-cross-h"></div>
+      <div class="ar-cross-v"></div>
+    </div>
+
+    <!-- Off-screen Target Guide Arrow -->
+    <div class="ar-offscreen-wrap" id="arConstelOffscreen" style="display:none;">
+      <div class="ar-offscreen-arrow" id="arConstelOffArrow">➤</div>
+      <div class="ar-offscreen-text" id="arConstelOffText">もっと右へ 30°</div>
+    </div>
+
+    <!-- Real-time Guidance Banner -->
+    <div class="ar-guidance-card" id="arConstelGuideCard">
+      <div class="ar-guide-icon">🧭</div>
+      <div class="ar-guide-text">
+        <div id="arConstelGuideTitle" class="ar-guide-title">星座の方向へスマホを向けてください</div>
+        <div id="arConstelGuideSub" class="ar-guide-sub">現在: 方位 --° • 仰角 --°</div>
+      </div>
+    </div>
+
+    <!-- Bottom Constellation Switcher Carousel -->
+    <div class="ar-constel-carousel" id="arConstelCarousel">
+      <!-- Populated by app.js -->
     </div>
   </div>
 </div>

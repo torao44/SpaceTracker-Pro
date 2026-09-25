@@ -1,7 +1,7 @@
 {
   "name": "SpaceTracker Pro",
   "short_name": "SpaceTracker",
-  "description": "ISS・打上げ・オーロラ・流星群をリアルタイムに追跡",
+  "description": "ISS・今日の夜空・星座ARナビ・打上げ・流星群をリアルタイム追跡",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

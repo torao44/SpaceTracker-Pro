@@ -72,6 +72,37 @@ const els = {
   arHelpModalOverlay: document.getElementById('arHelpModalOverlay'),
   arHelpModalClose: document.getElementById('arHelpModalClose'),
   arHelpConfirmBtn: document.getElementById('arHelpConfirmBtn'),
+  // Today's Night Sky & Constellations
+  openConstelArBtn: document.getElementById('openConstelArBtn'),
+  constelSubLoc: document.getElementById('constelSubLoc'),
+  constelTimeText: document.getElementById('constelTimeText'),
+  constelSimBadge: document.getElementById('constelSimBadge'),
+  constelTimeNow: document.getElementById('constelTimeNow'),
+  constelTime20: document.getElementById('constelTime20'),
+  constelTime23: document.getElementById('constelTime23'),
+  constelCanvas: document.getElementById('constelCanvas'),
+  constelVisibleCount: document.getElementById('constelVisibleCount'),
+  openConstelArFromDome: document.getElementById('openConstelArFromDome'),
+  constelFilters: document.getElementById('constelFilters'),
+  constelList: document.getElementById('constelList'),
+  // Constellation AR Modal
+  arConstelModal: document.getElementById('arConstelModal'),
+  arConstelViewport: document.getElementById('arConstelViewport'),
+  arConstelVideo: document.getElementById('arConstelVideo'),
+  arConstelCanvas: document.getElementById('arConstelCanvas'),
+  arConstelName: document.getElementById('arConstelName'),
+  arConstelSub: document.getElementById('arConstelSub'),
+  arConstelOffscreen: document.getElementById('arConstelOffscreen'),
+  arConstelOffArrow: document.getElementById('arConstelOffArrow'),
+  arConstelOffText: document.getElementById('arConstelOffText'),
+  arConstelGuideCard: document.getElementById('arConstelGuideCard'),
+  arConstelGuideTitle: document.getElementById('arConstelGuideTitle'),
+  arConstelGuideSub: document.getElementById('arConstelGuideSub'),
+  arConstelCarousel: document.getElementById('arConstelCarousel'),
+  arConstelCamBtn: document.getElementById('arConstelCamBtn'),
+  arConstelSoundBtn: document.getElementById('arConstelSoundBtn'),
+  arConstelHelpBtn: document.getElementById('arConstelHelpBtn'),
+  arConstelCloseBtn: document.getElementById('arConstelCloseBtn'),
 };
 
 /* ---------------- ISS 現在位置 ----------------
@@ -990,6 +1021,13 @@ function updateCelestialUI() {
 
   // Update ISS visible passes for user location
   loadISSPasses(userLocation.lat, userLocation.lon, userLocation.city);
+
+  // Update Constellations for user location
+  if (typeof updateConstelTimeUI === 'function') {
+    updateConstelTimeUI();
+    renderConstelSkyDome();
+    renderConstelCards();
+  }
 }
 
 async function acquireLocation(silent = false) {
@@ -1793,6 +1831,954 @@ els.arSnapBtn?.addEventListener('click', () => {
   updateARGuidance();
 });
 
+/* ==========================================================
+   Today's Night Sky & AR Constellation Navigator (v1.5)
+   現在地からのリアルタイム夜空星座計算・天球図・AR星座探索
+   ========================================================== */
+const CONSTELLATIONS_DATA = [
+  {
+    id: 'orion',
+    nameJa: 'オリオン座',
+    nameEn: 'Orion',
+    season: '冬',
+    centerRa: 83.8,
+    centerDec: 0.0,
+    brightestStar: { nameJa: 'リゲル', mag: 0.13 },
+    asterism: '冬の大三角・三ツ星',
+    description: '冬の夜空の王者。整然と並ぶ三ツ星と、赤色超巨星ベテルギウス、青白く輝くリゲルが特徴です。',
+    stars: [
+      { nameJa: 'ベテルギウス', ra: 88.79, dec: 7.41, mag: 0.42, major: true },
+      { nameJa: 'リゲル', ra: 78.63, dec: -8.20, mag: 0.13, major: true },
+      { nameJa: 'ベラトリックス', ra: 81.28, dec: 6.35, mag: 1.64 },
+      { nameJa: 'サイフ', ra: 86.94, dec: -9.67, mag: 2.07 },
+      { nameJa: 'アルニタク', ra: 85.19, dec: -1.94, mag: 1.77 },
+      { nameJa: 'アルニラム', ra: 84.05, dec: -1.20, mag: 1.69 },
+      { nameJa: 'ミンタカ', ra: 83.00, dec: -0.30, mag: 2.23 },
+    ],
+    lines: [[0, 2], [2, 6], [6, 5], [5, 4], [4, 3], [3, 1], [1, 6], [0, 4]],
+  },
+  {
+    id: 'ursa_major',
+    nameJa: 'おおぐま座 (北斗七星)',
+    nameEn: 'Ursa Major',
+    season: '通年',
+    centerRa: 165.0,
+    centerDec: 55.0,
+    brightestStar: { nameJa: 'アリオト', mag: 1.76 },
+    asterism: '北斗七星',
+    description: '北天のひしゃく型7星。春の夜空高く輝き、北極星を探す定番の指標です。',
+    stars: [
+      { nameJa: 'ドゥーベ', ra: 165.93, dec: 61.75, mag: 1.79 },
+      { nameJa: 'メラク', ra: 165.46, dec: 56.38, mag: 2.37 },
+      { nameJa: 'フェクダ', ra: 178.46, dec: 53.69, mag: 2.44 },
+      { nameJa: 'メグレズ', ra: 183.86, dec: 57.03, mag: 3.31 },
+      { nameJa: 'アリオト', ra: 193.51, dec: 55.96, mag: 1.76, major: true },
+      { nameJa: 'ミザール', ra: 200.98, dec: 54.92, mag: 2.23 },
+      { nameJa: 'アルカイド', ra: 206.89, dec: 49.31, mag: 1.86 },
+    ],
+    lines: [[0, 1], [1, 2], [2, 3], [3, 0], [3, 4], [4, 5], [5, 6]],
+  },
+  {
+    id: 'cassiopeia',
+    nameJa: 'カシオペヤ座',
+    nameEn: 'Cassiopeia',
+    season: '通年',
+    centerRa: 15.0,
+    centerDec: 60.0,
+    brightestStar: { nameJa: 'シェダル', mag: 2.24 },
+    asterism: '北のW字',
+    description: '秋から冬にかけて北の空高く昇る「W」の形。北極星を見つける指標になります。',
+    stars: [
+      { nameJa: 'カフ (β)', ra: 2.29, dec: 59.15, mag: 2.28 },
+      { nameJa: 'シェダル (α)', ra: 10.13, dec: 56.54, mag: 2.24, major: true },
+      { nameJa: 'ツィー (γ)', ra: 14.18, dec: 60.72, mag: 2.15 },
+      { nameJa: 'ルクバー (δ)', ra: 21.45, dec: 60.23, mag: 2.68 },
+      { nameJa: 'セギン (ε)', ra: 26.04, dec: 63.67, mag: 3.35 },
+    ],
+    lines: [[0, 1], [1, 2], [2, 3], [3, 4]],
+  },
+  {
+    id: 'lyra',
+    nameJa: 'こと座 (ベガ・織姫星)',
+    nameEn: 'Lyra',
+    season: '夏',
+    centerRa: 283.4,
+    centerDec: 36.8,
+    brightestStar: { nameJa: 'ベガ (織姫)', mag: 0.03 },
+    asterism: '夏の大三角',
+    description: '夏の大三角の主役、全天5位の青白い0等星ベガ。七夕の織姫星です。',
+    stars: [
+      { nameJa: 'ベガ', ra: 279.23, dec: 38.78, mag: 0.03, major: true },
+      { nameJa: 'シェリアク', ra: 282.52, dec: 33.36, mag: 3.52 },
+      { nameJa: 'スラファト', ra: 284.74, dec: 32.69, mag: 3.25 },
+      { nameJa: 'デルタ星', ra: 283.69, dec: 36.90, mag: 4.30 },
+      { nameJa: 'ゼータ星', ra: 281.20, dec: 37.60, mag: 4.34 },
+    ],
+    lines: [[0, 4], [4, 1], [1, 2], [2, 3], [3, 4]],
+  },
+  {
+    id: 'aquila',
+    nameJa: 'わし座 (アルタイル・彦星)',
+    nameEn: 'Aquila',
+    season: '夏',
+    centerRa: 297.0,
+    centerDec: 3.0,
+    brightestStar: { nameJa: 'アルタイル (彦星)', mag: 0.77 },
+    asterism: '夏の大三角',
+    description: '天の川を挟んでベガと向き合う彦星アルタイル。夏の大三角の南の頂点です。',
+    stars: [
+      { nameJa: 'アルタイル', ra: 297.70, dec: 8.87, mag: 0.77, major: true },
+      { nameJa: 'タラゼド', ra: 296.54, dec: 10.61, mag: 2.72 },
+      { nameJa: 'アルシャイン', ra: 298.83, dec: 6.41, mag: 3.71 },
+      { nameJa: 'デルタ星', ra: 291.37, dec: 3.11, mag: 3.36 },
+      { nameJa: 'ラムダ星', ra: 286.54, dec: -4.88, mag: 3.43 },
+    ],
+    lines: [[1, 0], [0, 2], [0, 3], [3, 4]],
+  },
+  {
+    id: 'cygnus',
+    nameJa: 'はくちょう座 (デネブ・北十字)',
+    nameEn: 'Cygnus',
+    season: '夏',
+    centerRa: 309.0,
+    centerDec: 42.0,
+    brightestStar: { nameJa: 'デネブ', mag: 1.25 },
+    asterism: '夏の大三角・北十字',
+    description: '天の川に翼を広げる白鳥。十字に並ぶノーザンクロスと1等星デネブが印象的です。',
+    stars: [
+      { nameJa: 'デネブ', ra: 310.36, dec: 45.28, mag: 1.25, major: true },
+      { nameJa: 'サドル', ra: 305.56, dec: 40.26, mag: 2.23 },
+      { nameJa: 'アルビレオ', ra: 292.68, dec: 27.96, mag: 3.05 },
+      { nameJa: 'ギエナー', ra: 311.55, dec: 33.97, mag: 2.48 },
+      { nameJa: 'ルカバト', ra: 296.24, dec: 45.13, mag: 2.86 },
+    ],
+    lines: [[0, 1], [1, 2], [4, 1], [1, 3]],
+  },
+  {
+    id: 'canis_major',
+    nameJa: 'おおいぬ座 (シリウス)',
+    nameEn: 'Canis Major',
+    season: '冬',
+    centerRa: 101.3,
+    centerDec: -22.0,
+    brightestStar: { nameJa: 'シリウス', mag: -1.46 },
+    asterism: '冬の大三角',
+    description: '全天で最も明るい恒星シリウス（-1.46等）がきらめく、オリオンの猟犬。',
+    stars: [
+      { nameJa: 'シリウス', ra: 101.29, dec: -16.72, mag: -1.46, major: true },
+      { nameJa: 'ミルザム', ra: 95.67, dec: -17.96, mag: 1.98 },
+      { nameJa: 'ウェゼン', ra: 107.10, dec: -26.39, mag: 1.83 },
+      { nameJa: 'アダーラ', ra: 104.66, dec: -28.97, mag: 1.50 },
+    ],
+    lines: [[1, 0], [0, 2], [2, 3]],
+  },
+  {
+    id: 'taurus',
+    nameJa: 'おうし座 (すばる・アルデバラン)',
+    nameEn: 'Taurus',
+    season: '冬',
+    centerRa: 68.0,
+    centerDec: 16.5,
+    brightestStar: { nameJa: 'アルデバラン', mag: 0.85 },
+    asterism: 'すばる (プレアデス星団)',
+    description: 'オレンジの巨星アルデバランと、宝石のように群れ咲く「すばる（M45）」が有名です。',
+    stars: [
+      { nameJa: 'アルデバラン', ra: 68.98, dec: 16.51, mag: 0.85, major: true },
+      { nameJa: 'エルナト', ra: 81.57, dec: 28.61, mag: 1.65 },
+      { nameJa: 'すばる(M45)', ra: 56.75, dec: 24.11, mag: 1.60, major: true },
+      { nameJa: 'アイン', ra: 67.15, dec: 19.18, mag: 3.53 },
+      { nameJa: 'ティアンフアン', ra: 84.41, dec: 21.14, mag: 2.97 },
+    ],
+    lines: [[2, 3], [3, 0], [0, 1], [0, 4]],
+  },
+  {
+    id: 'gemini',
+    nameJa: 'ふたご座 (カストル・ポルックス)',
+    nameEn: 'Gemini',
+    season: '冬',
+    centerRa: 107.0,
+    centerDec: 22.5,
+    brightestStar: { nameJa: 'ポルックス', mag: 1.14 },
+    asterism: 'ふたご座流星群 放射点',
+    description: '仲良く並ぶ二つの星カストルとポルックス。12月中旬にはふたご座流星群が流れます。',
+    stars: [
+      { nameJa: 'ポルックス', ra: 116.17, dec: 28.03, mag: 1.14, major: true },
+      { nameJa: 'カストル', ra: 113.65, dec: 31.89, mag: 1.58, major: true },
+      { nameJa: 'アルヘナ', ra: 99.43, dec: 16.40, mag: 1.93 },
+      { nameJa: 'ワサト', ra: 110.03, dec: 21.98, mag: 3.53 },
+    ],
+    lines: [[1, 0], [1, 2], [0, 3]],
+  },
+  {
+    id: 'pegasus',
+    nameJa: 'ペガスス座 (秋の四辺形)',
+    nameEn: 'Pegasus',
+    season: '秋',
+    centerRa: 345.0,
+    centerDec: 20.0,
+    brightestStar: { nameJa: 'エニフ', mag: 2.39 },
+    asterism: '秋の四辺形',
+    description: '秋の夜空高く広がる大きな四辺形。秋の星座を探す中心的なランドマークです。',
+    stars: [
+      { nameJa: 'マルカブ', ra: 346.19, dec: 15.21, mag: 2.49 },
+      { nameJa: 'シェアト', ra: 345.94, dec: 28.08, mag: 2.44 },
+      { nameJa: 'アルゲニブ', ra: 3.31, dec: 15.18, mag: 2.84 },
+      { nameJa: 'アルフェラッツ', ra: 2.10, dec: 29.09, mag: 2.06, major: true },
+    ],
+    lines: [[0, 1], [1, 3], [3, 2], [2, 0]],
+  },
+  {
+    id: 'scorpius',
+    nameJa: 'さそり座 (アンタレス)',
+    nameEn: 'Scorpius',
+    season: '夏',
+    centerRa: 250.0,
+    centerDec: -28.0,
+    brightestStar: { nameJa: 'アンタレス', mag: 0.96 },
+    asterism: '火星の好敵手・S字',
+    description: '夏の南天低くに輝く赤い心臓アンタレスと優美なS字カーブを描く巨大なサソリ。',
+    stars: [
+      { nameJa: 'アンタレス', ra: 247.35, dec: -26.43, mag: 0.96, major: true },
+      { nameJa: 'アクラブ', ra: 241.36, dec: -19.81, mag: 2.56 },
+      { nameJa: 'ジュバ', ra: 240.08, dec: -22.62, mag: 2.29 },
+      { nameJa: 'シャウラ', ra: 263.40, dec: -37.10, mag: 1.62 },
+    ],
+    lines: [[1, 2], [2, 0], [0, 3]],
+  },
+  {
+    id: 'ursa_minor',
+    nameJa: 'こぐま座 (北極星・ポラリス)',
+    nameEn: 'Ursa Minor',
+    season: '通年',
+    centerRa: 225.0,
+    centerDec: 78.0,
+    brightestStar: { nameJa: '北極星 (ポラリス)', mag: 1.98 },
+    asterism: '真北の不動星',
+    description: '天の北極のすぐそばで決して動かない北極星。古来より旅人の針路となりました。',
+    stars: [
+      { nameJa: '北極星 (ポラリス)', ra: 37.95, dec: 89.26, mag: 1.98, major: true },
+      { nameJa: 'コカブ', ra: 222.68, dec: 74.16, mag: 2.08 },
+      { nameJa: 'フェルカド', ra: 230.19, dec: 71.83, mag: 3.00 },
+    ],
+    lines: [[0, 1], [1, 2]],
+  },
+];
+
+/* Astrometry Conversion: RA/Dec -> Az/Elev */
+function raDecToAzAltCalc(raDeg, decDeg, latDeg, lonDeg, date) {
+  const rad = Math.PI / 180;
+  const deg = 180 / Math.PI;
+  const time = date.getTime();
+  const jd = time / 86400000 + 2440587.5;
+  const T = (jd - 2451545.0) / 36525.0;
+
+  let gmst = 280.46061837 + 360.98564736629 * (jd - 2451545.0) + 0.000387933 * T * T - (T * T * T) / 38710000.0;
+  gmst = ((gmst % 360) + 360) % 360;
+  const lst = ((gmst + lonDeg) % 360 + 360) % 360;
+
+  let h = ((lst - raDeg) % 360 + 360) % 360;
+  if (h > 180) h -= 360;
+  const hRad = h * rad;
+
+  const latRad = latDeg * rad;
+  const decRad = decDeg * rad;
+
+  const sinAlt = Math.sin(latRad) * Math.sin(decRad) + Math.cos(latRad) * Math.cos(decRad) * Math.cos(hRad);
+  const altRad = Math.asin(Math.max(-1, Math.min(1, sinAlt)));
+  const altDeg = altRad * deg;
+
+  const cosAlt = Math.cos(altRad);
+  let azDeg = 0;
+  if (Math.abs(cosAlt) > 1e-6) {
+    const cosAz = (Math.sin(decRad) - Math.sin(latRad) * Math.sin(altRad)) / (Math.cos(latRad) * cosAlt);
+    const sinAz = -Math.cos(decRad) * Math.sin(hRad) / cosAlt;
+    const azRad = Math.atan2(sinAz, cosAz);
+    azDeg = (azRad * deg + 360) % 360;
+  }
+  return { az: Math.round(azDeg), elev: Math.round(altDeg) };
+}
+
+function getCompassJa(az, elev) {
+  if (elev !== undefined && elev >= 78) return '天頂付近';
+  const dirs = ['北', '北北東', '北東', '東北東', '東', '東南東', '南東', '南南東', '南', '南南西', '南西', '西南西', '西', '西北西', '北西', '北北西'];
+  const idx = Math.round((((az % 360) + 360) % 360) / 22.5) % 16;
+  return dirs[idx];
+}
+
+/* Constellation State */
+let constelState = {
+  timeOffsetHours: 0,
+  activeFilter: 'visible',
+  selectedId: 'orion',
+};
+
+function getEffectiveConstelDate() {
+  const d = new Date();
+  if (constelState.timeOffsetHours !== 0) {
+    d.setHours(d.getHours() + constelState.timeOffsetHours);
+  }
+  return d;
+}
+
+function computeAllConstellations() {
+  const date = getEffectiveConstelDate();
+  const lat = userLocation ? userLocation.lat : 35.6895;
+  const lon = userLocation ? userLocation.lon : 139.6917;
+
+  return CONSTELLATIONS_DATA.map(c => {
+    const center = raDecToAzAltCalc(c.centerRa, c.centerDec, lat, lon, date);
+    const isVisible = center.elev > 5;
+    const compass = getCompassJa(center.az, center.elev);
+
+    const stars = c.stars.map(s => {
+      const pos = raDecToAzAltCalc(s.ra, s.dec, lat, lon, date);
+      return {
+        ...s,
+        az: pos.az,
+        elev: pos.elev,
+        isVisible: pos.elev > 0,
+      };
+    });
+
+    return {
+      ...c,
+      az: center.az,
+      elev: center.elev,
+      compass,
+      isVisible,
+      stars,
+    };
+  });
+}
+
+/* Render Planisphere Sky Dome */
+function renderConstelSkyDome() {
+  const canvas = els.constelCanvas;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const w = canvas.width = 360;
+  const h = canvas.height = 360;
+  ctx.clearRect(0, 0, w, h);
+
+  const cx = w / 2;
+  const cy = h / 2;
+  const radius = cx - 22;
+
+  // Background
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+  grad.addColorStop(0, '#0a1428');
+  grad.addColorStop(0.7, '#060b18');
+  grad.addColorStop(1, '#02050c');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Altitude Rings (30°, 60°)
+  ctx.strokeStyle = 'rgba(79, 209, 232, 0.15)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * (1 - 30 / 90), 0, Math.PI * 2);
+  ctx.arc(cx, cy, radius * (1 - 60 / 90), 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Zenith Cross
+  ctx.strokeStyle = 'rgba(232, 181, 79, 0.4)';
+  ctx.beginPath();
+  ctx.moveTo(cx - 5, cy); ctx.lineTo(cx + 5, cy);
+  ctx.moveTo(cx, cy - 5); ctx.lineTo(cx, cy + 5);
+  ctx.stroke();
+
+  // Outer Border
+  ctx.strokeStyle = '#4fd1e8';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Direction Labels
+  ctx.font = 'bold 11px Space Grotesk, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#e8b54f';
+  ctx.fillText('北 (N)', cx, cy - radius - 12);
+  ctx.fillText('東 (E)', cx - radius - 12, cy);
+  ctx.fillText('南 (S)', cx, cy + radius + 12);
+  ctx.fillText('西 (W)', cx + radius + 12, cy);
+
+  const project = (az, elev) => {
+    if (elev < 0) return null;
+    const r = radius * (1 - elev / 90);
+    const theta = ((az - 90) * Math.PI) / 180;
+    return {
+      x: cx - r * Math.sin(theta),
+      y: cy - r * Math.cos(theta),
+    };
+  };
+
+  const list = computeAllConstellations();
+  let visibleCount = 0;
+
+  list.forEach(item => {
+    if (item.isVisible) visibleCount++;
+    const isSel = constelState.selectedId === item.id;
+
+    // Project stars
+    const pStars = item.stars.map(s => ({
+      pt: project(s.az, s.elev),
+      star: s,
+    }));
+
+    // Draw lines
+    ctx.save();
+    ctx.strokeStyle = isSel
+      ? 'rgba(79, 209, 232, 0.95)'
+      : item.isVisible ? 'rgba(138, 153, 179, 0.45)' : 'rgba(50, 70, 100, 0.15)';
+    ctx.lineWidth = isSel ? 2 : 1;
+    if (isSel) {
+      ctx.shadowColor = '#4fd1e8';
+      ctx.shadowBlur = 6;
+    }
+
+    item.lines.forEach(([iA, iB]) => {
+      const sA = pStars[iA];
+      const sB = pStars[iB];
+      if (sA?.pt && sB?.pt) {
+        ctx.beginPath();
+        ctx.moveTo(sA.pt.x, sA.pt.y);
+        ctx.lineTo(sB.pt.x, sB.pt.y);
+        ctx.stroke();
+      }
+    });
+    ctx.restore();
+
+    // Draw stars
+    pStars.forEach(({ pt, star }) => {
+      if (!pt) return;
+      const r = Math.max(1.5, 4 - star.mag * 0.7);
+      ctx.fillStyle = star.mag < 0.5 ? '#fff4d6' : '#ffffff';
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Constellation Center Label
+    if (item.isVisible) {
+      const cpt = project(item.az, item.elev);
+      if (cpt) {
+        ctx.save();
+        ctx.font = `${isSel ? 'bold ' : ''}10px Space Grotesk, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = isSel ? '#4fd1e8' : 'rgba(203, 213, 225, 0.8)';
+        ctx.fillText(item.nameJa, cpt.x, cpt.y - 6);
+        ctx.restore();
+      }
+    }
+  });
+
+  if (els.constelVisibleCount) {
+    els.constelVisibleCount.textContent = `現在 ${visibleCount} 星座が地平線上に上昇`;
+  }
+}
+
+/* Render Constellation Cards */
+function renderConstelCards() {
+  if (!els.constelList) return;
+  const list = computeAllConstellations();
+  const filter = constelState.activeFilter;
+
+  let filtered = list;
+  if (filter === 'visible') filtered = list.filter(c => c.isVisible);
+  else if (filter === 'spring') filtered = list.filter(c => c.season === '春' || c.season === '通年');
+  else if (filter === 'summer') filtered = list.filter(c => c.season === '夏' || c.season === '通年');
+  else if (filter === 'autumn') filtered = list.filter(c => c.season === '秋' || c.season === '通年');
+  else if (filter === 'winter') filtered = list.filter(c => c.season === '冬' || c.season === '通年');
+
+  els.constelList.innerHTML = filtered.map(c => {
+    const isSel = constelState.selectedId === c.id;
+    return `
+      <div class="constel-card ${isSel ? 'active' : ''}" data-id="${c.id}">
+        <div class="constel-card-head">
+          <div>
+            <div class="constel-card-name">${c.nameJa} <span class="constel-card-sub">(${c.nameEn})</span></div>
+            ${c.asterism ? `<span class="constel-sim-badge">${c.asterism}</span>` : ''}
+          </div>
+          <span class="constel-vis-pill ${c.isVisible ? 'visible' : 'hidden'}">
+            ${c.isVisible ? '● 見頃' : '地平線下'}
+          </span>
+        </div>
+        <div class="constel-card-angles">方位: ${c.compass} (${c.az}°) • 高度: ${c.elev}°</div>
+        <p class="constel-card-desc">${c.description}</p>
+        <div class="constel-card-foot">
+          <span class="constel-star-name">★ ${c.brightestStar.nameJa} (${c.brightestStar.mag}等)</span>
+          <button class="btn-card-constel-ar" data-id="${c.id}">📱 ARで探す</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Add click handlers
+  els.constelList.querySelectorAll('.constel-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const id = card.dataset.id;
+      constelState.selectedId = id;
+      renderConstelSkyDome();
+      renderConstelCards();
+    });
+  });
+
+  els.constelList.querySelectorAll('.btn-card-constel-ar').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openConstelAR(btn.dataset.id);
+    });
+  });
+}
+
+function updateConstelTimeUI() {
+  const date = getEffectiveConstelDate();
+  if (els.constelTimeText) {
+    els.constelTimeText.textContent = date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+  }
+  if (els.constelSimBadge) {
+    els.constelSimBadge.style.display = constelState.timeOffsetHours !== 0 ? 'inline-block' : 'none';
+  }
+  if (els.constelSubLoc && userLocation) {
+    els.constelSubLoc.textContent = `📍 ${userLocation.city || '現在地'} (${userLocation.lat.toFixed(2)}°N, ${userLocation.lon.toFixed(2)}°E) からリアルタイム計算`;
+  }
+}
+
+/* ==========================================================
+   CONSTELLATION AR SKY NAVIGATOR ENGINE (MODAL)
+   ========================================================== */
+const arConstelState = {
+  active: false,
+  targetId: 'orion',
+  azimuth: 180,
+  pitch: 45,
+  manualMode: false,
+  sound: true,
+  cameraActive: false,
+  mediaStream: null,
+  audioCtx: null,
+  lastBeep: 0,
+  animId: null,
+  dragStart: null,
+};
+
+function openConstelAR(constelId) {
+  if (constelId) arConstelState.targetId = constelId;
+  constelState.selectedId = arConstelState.targetId;
+  arConstelState.active = true;
+
+  if (els.arConstelModal) els.arConstelModal.hidden = false;
+
+  startConstelCamera();
+  initConstelOrientation();
+  renderConstelCarousel();
+  startConstelLoop();
+}
+
+function closeConstelAR() {
+  arConstelState.active = false;
+  if (els.arConstelModal) els.arConstelModal.hidden = true;
+  stopConstelCamera();
+  if (arConstelState.animId) cancelAnimationFrame(arConstelState.animId);
+}
+
+async function startConstelCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+    arConstelState.mediaStream = stream;
+    if (els.arConstelVideo) {
+      els.arConstelVideo.srcObject = stream;
+      els.arConstelVideo.style.display = 'block';
+      els.arConstelVideo.play().catch(() => {});
+      arConstelState.cameraActive = true;
+    }
+  } catch (err) {
+    console.warn('Camera failed, fallback to virtual sky:', err);
+    arConstelState.cameraActive = false;
+    if (els.arConstelVideo) els.arConstelVideo.style.display = 'none';
+  }
+}
+
+function stopConstelCamera() {
+  if (arConstelState.mediaStream) {
+    arConstelState.mediaStream.getTracks().forEach(t => t.stop());
+    arConstelState.mediaStream = null;
+  }
+  arConstelState.cameraActive = false;
+  if (els.arConstelVideo) els.arConstelVideo.style.display = 'none';
+}
+
+function initConstelOrientation() {
+  const onOrientation = (e) => {
+    if (arConstelState.manualMode || !arConstelState.active) return;
+    let heading = 0;
+    if (typeof e.webkitCompassHeading !== 'undefined') {
+      heading = e.webkitCompassHeading;
+    } else if (e.alpha !== null) {
+      heading = (360 - e.alpha) % 360;
+    }
+    let p = 45;
+    if (e.beta !== null) {
+      p = Math.max(-10, Math.min(90, e.beta));
+    }
+    arConstelState.azimuth = Math.round(heading);
+    arConstelState.pitch = Math.round(p);
+  };
+  window.addEventListener('deviceorientation', onOrientation, true);
+}
+
+function playConstelBeep() {
+  if (!arConstelState.sound) return;
+  try {
+    if (!arConstelState.audioCtx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      arConstelState.audioCtx = new AudioCtx();
+    }
+    const ctx = arConstelState.audioCtx;
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.22);
+  } catch {}
+}
+
+function renderConstelCarousel() {
+  if (!els.arConstelCarousel) return;
+  const list = computeAllConstellations();
+  els.arConstelCarousel.innerHTML = list.map(c => `
+    <button class="ar-c-chip ${c.id === arConstelState.targetId ? 'active' : ''}" data-id="${c.id}">
+      <strong>${c.nameJa}</strong>
+      <span>${c.compass} ${c.elev}°</span>
+    </button>
+  `).join('');
+
+  els.arConstelCarousel.querySelectorAll('.ar-c-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      arConstelState.targetId = chip.dataset.id;
+      constelState.selectedId = chip.dataset.id;
+      renderConstelCarousel();
+    });
+  });
+}
+
+function startConstelLoop() {
+  const canvas = els.arConstelCanvas;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const loop = () => {
+    if (!arConstelState.active) return;
+    const w = canvas.width = canvas.clientWidth;
+    const h = canvas.height = canvas.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+
+    // If camera is OFF, render starry background & horizon
+    if (!arConstelState.cameraActive) {
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#040714');
+      grad.addColorStop(0.65, '#070f24');
+      grad.addColorStop(1, '#0e1d3b');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Horizon line
+      const horizonY = h * 0.5 + (arConstelState.pitch / 90) * (h * 0.8);
+      if (horizonY < h) {
+        ctx.fillStyle = 'rgba(7, 14, 28, 0.9)';
+        ctx.fillRect(0, horizonY, w, h - horizonY);
+        ctx.strokeStyle = 'rgba(79, 209, 232, 0.4)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, horizonY);
+        ctx.lineTo(w, horizonY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(79, 209, 232, 0.7)';
+        ctx.font = '10px sans-serif';
+        ctx.fillText('地平線 (0° HORIZON)', 14, horizonY - 6);
+      }
+    }
+
+    const fovX = 65;
+    const fovY = 50;
+    const list = computeAllConstellations();
+    const target = list.find(c => c.id === arConstelState.targetId) || list[0];
+
+    // Compute target delta
+    const deltaAz = ((target.az - arConstelState.azimuth + 540) % 360) - 180;
+    const deltaElev = target.elev - arConstelState.pitch;
+    const isLocked = Math.abs(deltaAz) <= 8 && Math.abs(deltaElev) <= 8;
+
+    // Update Header Badge
+    if (els.arConstelName) els.arConstelName.textContent = target.nameJa;
+    if (els.arConstelSub) els.arConstelSub.textContent = `方位: ${target.compass} (${target.az}°) • 高度: ${target.elev}°`;
+
+    // Guidance Card
+    if (els.arConstelGuideTitle) {
+      els.arConstelGuideTitle.textContent = isLocked
+        ? `★ ${target.nameJa} 視野内にロック中！`
+        : `${target.nameJa} の方向へスマホを向けてください`;
+    }
+    if (els.arConstelGuideSub) {
+      els.arConstelGuideSub.textContent = `現在: 方位 ${arConstelState.azimuth}° • 仰角 ${arConstelState.pitch}° / 目標: ${target.az}° • ${target.elev}°`;
+    }
+    if (els.arConstelGuideCard) {
+      els.arConstelGuideCard.classList.toggle('locked', isLocked);
+    }
+
+    // Offscreen guidance arrow
+    if (els.arConstelOffscreen) {
+      const isOff = !isLocked && (Math.abs(deltaAz) > 28 || Math.abs(deltaElev) > 22);
+      els.arConstelOffscreen.style.display = isOff ? 'flex' : 'none';
+      if (isOff) {
+        const rad = Math.atan2(-deltaElev, deltaAz);
+        const deg = (rad * 180) / Math.PI;
+        if (els.arConstelOffArrow) els.arConstelOffArrow.style.transform = `rotate(${deg}deg)`;
+        if (els.arConstelOffText) {
+          let t = '';
+          if (Math.abs(deltaAz) > 12) t += (deltaAz > 0 ? `右へ ${Math.round(deltaAz)}° ` : `左へ ${Math.round(-deltaAz)}° `);
+          if (Math.abs(deltaElev) > 12) t += (deltaElev > 0 ? `見上げる ↑ ${Math.round(deltaElev)}°` : `見下ろす ↓ ${Math.round(-deltaElev)}°`);
+          els.arConstelOffText.textContent = t || '方向を調整中';
+        }
+      }
+    }
+
+    // Play lock sound & vibrate once per 3s
+    if (isLocked) {
+      const now = Date.now();
+      if (now - arConstelState.lastBeep > 3000) {
+        arConstelState.lastBeep = now;
+        playConstelBeep();
+        if (navigator.vibrate) navigator.vibrate([60, 40, 80]);
+      }
+    }
+
+    // Project and Draw Constellations
+    list.forEach(c => {
+      const isCurTarget = c.id === arConstelState.targetId;
+      const projStars = c.stars.map(s => {
+        const dAz = ((s.az - arConstelState.azimuth + 540) % 360) - 180;
+        const dEl = s.elev - arConstelState.pitch;
+        const sx = w / 2 + (dAz / (fovX / 2)) * (w / 2);
+        const sy = h / 2 - (dEl / (fovY / 2)) * (h / 2);
+        const inView = sx >= -40 && sx <= w + 40 && sy >= -40 && sy <= h + 40;
+        return { x: sx, y: sy, inView, s };
+      });
+
+      const anyInView = projStars.some(p => p.inView);
+      if (!anyInView && !isCurTarget) return;
+
+      // Lines
+      ctx.save();
+      ctx.strokeStyle = isCurTarget ? 'rgba(79, 209, 232, 0.85)' : 'rgba(138, 153, 179, 0.35)';
+      ctx.lineWidth = isCurTarget ? 2 : 1;
+      if (isCurTarget) {
+        ctx.shadowColor = '#4fd1e8';
+        ctx.shadowBlur = 8;
+      }
+      c.lines.forEach(([iA, iB]) => {
+        const pA = projStars[iA];
+        const pB = projStars[iB];
+        if (pA && pB && (pA.inView || pB.inView)) {
+          ctx.beginPath();
+          ctx.moveTo(pA.x, pA.y);
+          ctx.lineTo(pB.x, pB.y);
+          ctx.stroke();
+        }
+      });
+      ctx.restore();
+
+      // Stars
+      projStars.forEach(({ x, y, inView, s }) => {
+        if (!inView) return;
+        const r = Math.max(2.2, Math.min(6.5, 5 - s.mag * 0.8));
+        ctx.save();
+        if (s.major || isCurTarget) {
+          const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 3.5);
+          glow.addColorStop(0, s.mag < 0.5 ? 'rgba(255, 235, 170, 0.9)' : 'rgba(120, 220, 255, 0.85)');
+          glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(x, y, r * 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = s.mag < 0.5 ? '#fff3d1' : '#ffffff';
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Label
+        if ((s.major || isCurTarget) && inView) {
+          ctx.save();
+          ctx.font = '10px Space Grotesk, sans-serif';
+          ctx.fillStyle = isCurTarget ? '#ffffff' : '#cbd5e1';
+          ctx.shadowColor = '#000000';
+          ctx.shadowBlur = 4;
+          ctx.fillText(s.nameJa, x + r + 4, y + 3);
+          ctx.restore();
+        }
+      });
+
+      // Target Constellation Badge
+      if (isCurTarget) {
+        const dCAz = ((c.az - arConstelState.azimuth + 540) % 360) - 180;
+        const dCEl = c.elev - arConstelState.pitch;
+        const cx = w / 2 + (dCAz / (fovX / 2)) * (w / 2);
+        const cy = h / 2 - (dCEl / (fovY / 2)) * (h / 2);
+
+        if (cx >= 60 && cx <= w - 60 && cy >= 60 && cy <= h - 60) {
+          ctx.save();
+          ctx.textAlign = 'center';
+          ctx.fillStyle = 'rgba(7, 14, 28, 0.75)';
+          ctx.strokeStyle = isLocked ? '#4ee08a' : '#4fd1e8';
+          ctx.lineWidth = 1.5;
+          ctx.shadowColor = isLocked ? '#4ee08a' : '#4fd1e8';
+          ctx.shadowBlur = 10;
+          const text = `✨ ${c.nameJa} (${c.nameEn})`;
+          ctx.font = 'bold 12px Space Grotesk, sans-serif';
+          const tw = ctx.measureText(text).width;
+          ctx.beginPath();
+          ctx.roundRect(cx - tw / 2 - 10, cy - 28, tw + 20, 24, 12);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = isLocked ? '#4ee08a' : '#eef2f8';
+          ctx.fillText(text, cx, cy - 12);
+          ctx.restore();
+        }
+      }
+    });
+
+    arConstelState.animId = requestAnimationFrame(loop);
+  };
+  arConstelState.animId = requestAnimationFrame(loop);
+}
+
+/* Wire Constellation Event Listeners */
+function initNightSkyConstellations() {
+  updateConstelTimeUI();
+  renderConstelSkyDome();
+  renderConstelCards();
+
+  // Resize listener for sky dome
+  window.addEventListener('resize', renderConstelSkyDome);
+
+  // Time preset buttons
+  els.constelTimeNow?.addEventListener('click', () => {
+    constelState.timeOffsetHours = 0;
+    document.querySelectorAll('.constel-time-presets .chip').forEach(c => c.classList.remove('active'));
+    els.constelTimeNow.classList.add('active');
+    updateConstelTimeUI();
+    renderConstelSkyDome();
+    renderConstelCards();
+  });
+
+  els.constelTime20?.addEventListener('click', () => {
+    const now = new Date();
+    const target = new Date();
+    target.setHours(20, 0, 0, 0);
+    if (target < now) target.setDate(target.getDate() + 1);
+    constelState.timeOffsetHours = Math.round((target.getTime() - now.getTime()) / 3600000);
+
+    document.querySelectorAll('.constel-time-presets .chip').forEach(c => c.classList.remove('active'));
+    els.constelTime20.classList.add('active');
+    updateConstelTimeUI();
+    renderConstelSkyDome();
+    renderConstelCards();
+  });
+
+  els.constelTime23?.addEventListener('click', () => {
+    const now = new Date();
+    const target = new Date();
+    target.setHours(23, 0, 0, 0);
+    if (target < now) target.setDate(target.getDate() + 1);
+    constelState.timeOffsetHours = Math.round((target.getTime() - now.getTime()) / 3600000);
+
+    document.querySelectorAll('.constel-time-presets .chip').forEach(c => c.classList.remove('active'));
+    els.constelTime23.classList.add('active');
+    updateConstelTimeUI();
+    renderConstelSkyDome();
+    renderConstelCards();
+  });
+
+  // Filter chips
+  els.constelFilters?.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      els.constelFilters.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      constelState.activeFilter = chip.dataset.filter || 'visible';
+      renderConstelCards();
+    });
+  });
+
+  // Launch AR Buttons
+  els.openConstelArBtn?.addEventListener('click', () => openConstelAR());
+  els.openConstelArFromDome?.addEventListener('click', () => openConstelAR());
+  els.constelCanvas?.addEventListener('click', () => openConstelAR());
+
+  // Modal Close & Controls
+  els.arConstelCloseBtn?.addEventListener('click', closeConstelAR);
+  els.arConstelCamBtn?.addEventListener('click', () => {
+    if (arConstelState.cameraActive) {
+      stopConstelCamera();
+    } else {
+      startConstelCamera();
+    }
+  });
+  els.arConstelSoundBtn?.addEventListener('click', () => {
+    arConstelState.sound = !arConstelState.sound;
+    if (els.arConstelSoundBtn) els.arConstelSoundBtn.textContent = arConstelState.sound ? '🔔' : '🔕';
+  });
+  els.arConstelHelpBtn?.addEventListener('click', () => {
+    if (els.arHelpModalOverlay) els.arHelpModalOverlay.hidden = false;
+  });
+
+  // Manual Drag on AR Canvas
+  const arC = els.arConstelCanvas;
+  if (arC) {
+    const onStart = (cx, cy) => {
+      arConstelState.manualMode = true;
+      arConstelState.dragStart = { x: cx, y: cy, az: arConstelState.azimuth, pt: arConstelState.pitch };
+    };
+    const onMove = (cx, cy) => {
+      if (!arConstelState.dragStart) return;
+      const dx = cx - arConstelState.dragStart.x;
+      const dy = cy - arConstelState.dragStart.y;
+      arConstelState.azimuth = (arConstelState.dragStart.az - dx * 0.25 + 360) % 360;
+      arConstelState.pitch = Math.max(-10, Math.min(90, arConstelState.dragStart.pt + dy * 0.25));
+    };
+    const onEnd = () => { arConstelState.dragStart = null; };
+
+    arC.addEventListener('mousedown', e => onStart(e.clientX, e.clientY));
+    window.addEventListener('mousemove', e => onMove(e.clientX, e.clientY));
+    window.addEventListener('mouseup', onEnd);
+    arC.addEventListener('touchstart', e => { if (e.touches[0]) onStart(e.touches[0].clientX, e.touches[0].clientY); });
+    window.addEventListener('touchmove', e => { if (e.touches[0]) onMove(e.touches[0].clientX, e.touches[0].clientY); });
+    window.addEventListener('touchend', onEnd);
+  }
+}
+
 /* ---------------- 初期化 ---------------- */
 els.refreshBtn?.addEventListener('click', loadISS);
 
@@ -1801,9 +2787,16 @@ loadCrew();
 loadLaunches();
 renderMeteors();
 updateCelestialUI();
+initNightSkyConstellations();
 acquireLocation(true); // ページを開いたときに現在地を自動取得
 initGalaxyCanvas(); // ゆっくり動く銀河キャンバスの初期化
 
 setInterval(loadISS, 5000);
 setInterval(updateCelestialUI, 60 * 1000); // 1分ごとに太陽・月情報を更新
+setInterval(() => {
+  if (typeof updateConstelTimeUI === 'function') {
+    updateConstelTimeUI();
+    renderConstelSkyDome();
+  }
+}, 30 * 1000); // 30秒ごとに星座位置・計算時刻を更新
 
