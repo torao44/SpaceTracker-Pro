@@ -32,6 +32,8 @@ const els = {
   celestialModalClose: document.getElementById('celestialModalClose'),
   celestialModalBody: document.getElementById('celestialModalBody'),
   issPassesBox: document.getElementById('issPassesBox'),
+  issPassesTitle: document.getElementById('issPassesTitle'),
+  issPassesNotice: document.getElementById('issPassesNotice'),
   issPassesLoc: document.getElementById('issPassesLoc'),
   issPassesList: document.getElementById('issPassesList'),
   issPassCountdown: document.getElementById('issPassCountdown'),
@@ -191,11 +193,21 @@ function updatePassCountdown() {
   if (days > 0) timeStr += `${days}日 `;
   timeStr += `${hours}時間 ${minutes}分 ${seconds}秒`;
 
+  const nextIsTop = next.quality === 'perfect';
+  const nextIsGreat = next.quality === 'great';
+  let badgeSpan = '';
+  if (nextIsTop) {
+    badgeSpan = `<span class="pass-cd-tag perfect">★ 絶好の好条件</span>`;
+  } else if (nextIsGreat) {
+    badgeSpan = `<span class="pass-cd-tag great">見晴らし良好</span>`;
+  }
+
   els.issPassCountdown.innerHTML = `
-    <div style="display:flex; align-items:center; gap:6px;">
+    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
       <span>⏱</span>
       <span style="color:var(--text-dim); font-size:11px;">次回可視通過まで:</span>
-      <span class="pass-cd-val">${timeStr}</span>
+      <span class="pass-cd-val ${nextIsTop ? 'perfect' : ''}">${timeStr}</span>
+      ${badgeSpan}
     </div>
     <span style="color:var(--text-dim); font-size:11px;">${next.dateStr} ${next.startStr}</span>
   `;
@@ -328,6 +340,24 @@ async function loadISSPasses(lat, lon, cityName) {
     currentVisiblePasses = visiblePasses;
     updatePassCountdown();
 
+    const hasPerfect = visiblePasses.some(p => p.quality === 'perfect');
+    const hasGreat = visiblePasses.some(p => p.quality === 'great');
+
+    // Update section container and notice badge
+    if (els.issPassesBox) {
+      els.issPassesBox.classList.toggle('has-perfect', hasPerfect);
+      els.issPassesBox.classList.toggle('has-great', !hasPerfect && hasGreat);
+    }
+    if (els.issPassesNotice) {
+      if (hasPerfect) {
+        els.issPassesNotice.innerHTML = `<span class="pass-head-badge perfect">★ 絶好の好条件あり！</span>`;
+      } else if (hasGreat) {
+        els.issPassesNotice.innerHTML = `<span class="pass-head-badge great">✨ 好条件の通過あり</span>`;
+      } else {
+        els.issPassesNotice.innerHTML = '';
+      }
+    }
+
     if (visiblePasses.length === 0) {
       els.issPassesList.innerHTML = `
         <div class="pass-empty">
@@ -338,25 +368,41 @@ async function loadISSPasses(lat, lon, cityName) {
       return;
     }
 
-    els.issPassesList.innerHTML = visiblePasses.map(p => `
-      <div class="pass-card ${p.quality}">
-        <div class="pass-card-top">
-          <span class="pass-date">${p.dateStr}</span>
-          <span class="pass-badge">最大 ${p.maxElev}°</span>
-        </div>
-        <div class="pass-card-main">
-          ${renderPassRadar(p, 64)}
-          <div class="pass-info-col">
-            <div class="pass-time">⏰ ${p.startStr} 〜 ${p.endStr}</div>
-            <div class="pass-quality-tag">${p.qualityLabel}</div>
-            <div class="pass-dur">観測時間: 約${p.durMin}分間</div>
+    els.issPassesList.innerHTML = visiblePasses.map(p => {
+      const isTop = p.quality === 'perfect';
+      const isGreat = p.quality === 'great';
+      const badgeHtml = isTop
+        ? `<span class="pass-badge perfect">★ 最大 ${p.maxElev}° (好条件)</span>`
+        : isGreat
+        ? `<span class="pass-badge great">最大 ${p.maxElev}° (良好)</span>`
+        : `<span class="pass-badge">最大 ${p.maxElev}°</span>`;
+
+      const qualityTagHtml = isTop
+        ? `<div class="pass-quality-tag perfect">⭐ ${p.qualityLabel}</div>`
+        : isGreat
+        ? `<div class="pass-quality-tag great">✨ ${p.qualityLabel}</div>`
+        : `<div class="pass-quality-tag">${p.qualityLabel}</div>`;
+
+      return `
+        <div class="pass-card ${p.quality}">
+          <div class="pass-card-top">
+            <span class="pass-date">${isTop ? '★ ' : ''}${p.dateStr}</span>
+            ${badgeHtml}
+          </div>
+          <div class="pass-card-main">
+            ${renderPassRadar(p, 64)}
+            <div class="pass-info-col">
+              <div class="pass-time">⏰ ${p.startStr} 〜 ${p.endStr}</div>
+              ${qualityTagHtml}
+              <div class="pass-dur">観測時間: 約${p.durMin}分間</div>
+            </div>
+          </div>
+          <div class="pass-route">
+            <span>🧭 ${p.startCompass} ↗ ${p.maxCompass} ↘ ${p.endCompass}</span>
           </div>
         </div>
-        <div class="pass-route">
-          <span>🧭 ${p.startCompass} ↗ ${p.maxCompass} ↘ ${p.endCompass}</span>
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
   } catch (err) {
     console.error('可視パス計算エラー:', err);
