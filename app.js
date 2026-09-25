@@ -44,6 +44,34 @@ const els = {
   skyLocCoords: document.getElementById('skyLocCoords'),
   skyStarlinkBtn: document.getElementById('skyStarlinkBtn'),
   skyIssBtn: document.getElementById('skyIssBtn'),
+  openArBtn: document.getElementById('openArBtn'),
+  arNavModal: document.getElementById('arNavModal'),
+  arViewport: document.getElementById('arViewport'),
+  arVideo: document.getElementById('arVideo'),
+  arCanvas: document.getElementById('arCanvas'),
+  arTargetMarker: document.getElementById('arTargetMarker'),
+  arTargetLabel: document.getElementById('arTargetLabel'),
+  arTargetSub: document.getElementById('arTargetSub'),
+  arOffscreenWrap: document.getElementById('arOffscreenWrap'),
+  arOffscreenArrow: document.getElementById('arOffscreenArrow'),
+  arPassSummary: document.getElementById('arPassSummary'),
+  arInstructionsText: document.getElementById('arInstructionsText'),
+  arAnglesText: document.getElementById('arAnglesText'),
+  arCompassIcon: document.getElementById('arCompassIcon'),
+  arGuidanceCard: document.getElementById('arGuidanceCard'),
+  arSensorPrompt: document.getElementById('arSensorPrompt'),
+  arSensorPermBtn: document.getElementById('arSensorPermBtn'),
+  arPassTabs: document.getElementById('arPassTabs'),
+  arModeToggle: document.getElementById('arModeToggle'),
+  arSnapBtn: document.getElementById('arSnapBtn'),
+  arSoundBtn: document.getElementById('arSoundBtn'),
+  arCamBtn: document.getElementById('arCamBtn'),
+  arCamText: document.getElementById('arCamText'),
+  arHelpBtn: document.getElementById('arHelpBtn'),
+  arCloseBtn: document.getElementById('arCloseBtn'),
+  arHelpModalOverlay: document.getElementById('arHelpModalOverlay'),
+  arHelpModalClose: document.getElementById('arHelpModalClose'),
+  arHelpConfirmBtn: document.getElementById('arHelpConfirmBtn'),
 };
 
 /* ---------------- ISS 現在位置 ----------------
@@ -209,7 +237,10 @@ function updatePassCountdown() {
       <span class="pass-cd-val ${nextIsTop ? 'perfect' : ''}">${timeStr}</span>
       ${badgeSpan}
     </div>
-    <span style="color:var(--text-dim); font-size:11px;">${next.dateStr} ${next.startStr}</span>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span style="color:var(--text-dim); font-size:11px;">${next.dateStr} ${next.startStr}</span>
+      <button class="btn-cd-ar" id="countdownArBtn" onclick="openARNavigator(0)">📱 空に向けて探す</button>
+    </div>
   `;
 }
 
@@ -368,7 +399,7 @@ async function loadISSPasses(lat, lon, cityName) {
       return;
     }
 
-    els.issPassesList.innerHTML = visiblePasses.map(p => {
+    els.issPassesList.innerHTML = visiblePasses.map((p, idx) => {
       const isTop = p.quality === 'perfect';
       const isGreat = p.quality === 'great';
       const badgeHtml = isTop
@@ -384,7 +415,7 @@ async function loadISSPasses(lat, lon, cityName) {
         : `<div class="pass-quality-tag">${p.qualityLabel}</div>`;
 
       return `
-        <div class="pass-card ${p.quality}">
+        <div class="pass-card ${p.quality}" onclick="openARNavigator(${idx})" title="タップしてスマホを空に向けるARナビを起動">
           <div class="pass-card-top">
             <span class="pass-date">${isTop ? '★ ' : ''}${p.dateStr}</span>
             ${badgeHtml}
@@ -399,6 +430,7 @@ async function loadISSPasses(lat, lon, cityName) {
           </div>
           <div class="pass-route">
             <span>🧭 ${p.startCompass} ↗ ${p.maxCompass} ↘ ${p.endCompass}</span>
+            <span class="btn-card-ar">🧭 ARナビ</span>
           </div>
         </div>
       `;
@@ -1235,6 +1267,531 @@ function initGalaxyCanvas() {
   }
   render();
 }
+
+/* ==========================================================
+   ISS AR Sky Navigator Engine (v1.4)
+   スマホを空に向けてISSの位置を探すARナビゲーション
+   ========================================================== */
+const arState = {
+  active: false,
+  passIndex: 0,
+  phase: 'peak', // 'peak' | 'start' | 'end'
+  azimuth: 0,    // 0=N, 90=E, 180=S, 270=W
+  pitch: 45,     // 0=horizon, 90=zenith
+  manualMode: false,
+  cameraActive: false,
+  soundEnabled: true,
+  mediaStream: null,
+  audioCtx: null,
+  lastBeep: 0,
+  animId: null,
+  dragStart: null,
+};
+
+function playLockBeepSound() {
+  if (!arState.soundEnabled) return;
+  try {
+    if (!arState.audioCtx) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) arState.audioCtx = new AudioContextClass();
+    }
+    const ctx = arState.audioCtx;
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.18);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.2);
+  } catch (e) {
+    // Audio context failed or blocked
+  }
+}
+
+function getARTargetCoords() {
+  const pass = currentVisiblePasses[arState.passIndex];
+  if (!pass) return { az: 180, elev: 45, label: '天頂付近', time: '' };
+
+  if (arState.phase === 'start') {
+    return {
+      az: Math.round(pass.startAz),
+      elev: 10,
+      label: `出現点 (${pass.startCompass})`,
+      time: pass.startStr || '',
+    };
+  }
+  if (arState.phase === 'end') {
+    return {
+      az: Math.round(pass.endAz),
+      elev: 10,
+      label: `消滅点 (${pass.endCompass})`,
+      time: pass.endStr || '',
+    };
+  }
+  // 'peak'
+  const peakAz = pass.maxElev >= 75 ? pass.startAz : Math.round((pass.startAz + pass.endAz) / 2);
+  return {
+    az: Math.round(peakAz),
+    elev: pass.maxElev,
+    label: `最大仰角 (${pass.maxCompass} ${pass.maxElev}°)`,
+    time: pass.dateStr || '',
+  };
+}
+
+function updateARGuidance() {
+  if (!arState.active) return;
+  const pass = currentVisiblePasses[arState.passIndex];
+  const target = getARTargetCoords();
+
+  // Angle difference
+  const deltaAz = ((target.az - arState.azimuth + 540) % 360) - 180;
+  const deltaElev = target.elev - arState.pitch;
+  const isLocked = Math.abs(deltaAz) <= 7 && Math.abs(deltaElev) <= 7;
+
+  // Angles text
+  if (els.arAnglesText) {
+    els.arAnglesText.innerHTML = `
+      <span>スマホ向き: ${arState.azimuth}°</span>
+      <span>仰角: ${arState.pitch}°</span>
+    `;
+  }
+
+  // Guidance card and text
+  if (els.arGuidanceCard && els.arInstructionsText) {
+    if (isLocked) {
+      els.arGuidanceCard.classList.add('locked');
+      els.arCompassIcon.textContent = '🎯';
+      els.arInstructionsText.innerHTML = `
+        <span class="ar-inst-locked">ロックオン！ この方角・高さにISSが見えます！</span>
+      `;
+      const now = Date.now();
+      if (now - arState.lastBeep > 1800) {
+        arState.lastBeep = now;
+        playLockBeepSound();
+        if (navigator.vibrate) navigator.vibrate([60, 40, 100]);
+      }
+    } else {
+      els.arGuidanceCard.classList.remove('locked');
+      els.arCompassIcon.textContent = '🧭';
+
+      let hStr = '';
+      if (deltaAz > 5) {
+        hStr = `<span class="ar-badge-inst right">👉 もっと右へ (${Math.abs(Math.round(deltaAz))}°)</span>`;
+      } else if (deltaAz < -5) {
+        hStr = `<span class="ar-badge-inst left">👈 もっと左へ (${Math.abs(Math.round(deltaAz))}°)</span>`;
+      } else {
+        hStr = `<span class="ar-badge-inst match">↔ 方角一致</span>`;
+      }
+
+      let vStr = '';
+      if (deltaElev > 5) {
+        vStr = `<span class="ar-badge-inst up">👆 もっと上へ (${Math.abs(Math.round(deltaElev))}°)</span>`;
+      } else if (deltaElev < -5) {
+        vStr = `<span class="ar-badge-inst down">👇 もっと下へ (${Math.abs(Math.round(deltaElev))}°)</span>`;
+      } else {
+        vStr = `<span class="ar-badge-inst match">↕ 仰角一致</span>`;
+      }
+
+      els.arInstructionsText.innerHTML = `${hStr} ${vStr}`;
+    }
+  }
+
+  // Projection FOV
+  const fovH = 60;
+  const fovV = 50;
+  const inFov = Math.abs(deltaAz) <= fovH / 2 && Math.abs(deltaElev) <= fovV / 2;
+
+  if (inFov) {
+    if (els.arTargetMarker) {
+      els.arTargetMarker.hidden = false;
+      const pctX = 50 + (deltaAz / (fovH / 2)) * 45;
+      const pctY = 50 - (deltaElev / (fovV / 2)) * 45;
+      els.arTargetMarker.style.left = `${pctX}%`;
+      els.arTargetMarker.style.top = `${pctY}%`;
+      if (isLocked) {
+        els.arTargetMarker.classList.add('locked');
+      } else {
+        els.arTargetMarker.classList.remove('locked');
+      }
+    }
+    if (els.arTargetSub) {
+      els.arTargetSub.textContent = `${target.label} (方角 ${target.az}° / 仰角 ${target.elev}°)`;
+    }
+    if (els.arOffscreenWrap) {
+      els.arOffscreenWrap.hidden = true;
+    }
+  } else {
+    if (els.arTargetMarker) els.arTargetMarker.hidden = true;
+    if (els.arOffscreenWrap && els.arOffscreenArrow) {
+      els.arOffscreenWrap.hidden = false;
+      const rad = Math.atan2(-deltaElev, deltaAz);
+      const deg = (rad * 180) / Math.PI;
+      els.arOffscreenArrow.style.transform = `rotate(${deg}deg) translateX(min(38vw, 150px)) rotate(${-deg}deg)`;
+    }
+  }
+}
+
+function renderARCanvas() {
+  if (!arState.active || arState.cameraActive) return;
+  const canvas = els.arCanvas;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const w = (canvas.width = canvas.parentElement?.clientWidth || window.innerWidth);
+  const h = (canvas.height = canvas.parentElement?.clientHeight || window.innerHeight);
+
+  // Background Sky Gradient based on pitch
+  const horizonY = h / 2 + (arState.pitch / 90) * (h * 0.6);
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#040711');
+  grad.addColorStop(0.65, '#0b162a');
+  grad.addColorStop(1, '#142542');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Stars
+  ctx.save();
+  for (let i = 0; i < 50; i++) {
+    const starAz = (i * 37) % 360;
+    const starElev = (i * 23) % 85 + 5;
+    const sDeltaAz = ((starAz - arState.azimuth + 540) % 360) - 180;
+    const sDeltaElev = starElev - arState.pitch;
+
+    if (Math.abs(sDeltaAz) < 50 && Math.abs(sDeltaElev) < 40) {
+      const sx = w / 2 + (sDeltaAz / 50) * (w / 2);
+      const sy = h / 2 - (sDeltaElev / 40) * (h / 2);
+      ctx.beginPath();
+      ctx.arc(sx, sy, (i % 3 === 0 ? 2 : 1.2), 0, Math.PI * 2);
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.85)' : 'rgba(180, 220, 255, 0.7)';
+      ctx.shadowBlur = 4;
+      ctx.shadowColor = '#fff';
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+
+  // Horizon Line
+  if (horizonY > 0 && horizonY < h) {
+    ctx.strokeStyle = 'rgba(78, 224, 138, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(0, horizonY);
+    ctx.lineTo(w, horizonY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Ground shading
+    const groundGrad = ctx.createLinearGradient(0, horizonY, 0, h);
+    groundGrad.addColorStop(0, 'rgba(5, 10, 18, 0.5)');
+    groundGrad.addColorStop(1, 'rgba(2, 5, 10, 0.95)');
+    ctx.fillStyle = groundGrad;
+    ctx.fillRect(0, horizonY, w, h - horizonY);
+
+    ctx.fillStyle = 'rgba(78, 224, 138, 0.7)';
+    ctx.font = '10px monospace';
+    ctx.fillText('地平線 (0°)', 12, horizonY - 6);
+  }
+
+  // Compass Cardinal Directions on Horizon
+  const cardinals = [
+    { deg: 0, label: '北 (N)' },
+    { deg: 45, label: '北東 (NE)' },
+    { deg: 90, label: '東 (E)' },
+    { deg: 135, label: '南東 (SE)' },
+    { deg: 180, label: '南 (S)' },
+    { deg: 225, label: '南西 (SW)' },
+    { deg: 270, label: '西 (W)' },
+    { deg: 315, label: '北西 (NW)' },
+  ];
+
+  cardinals.forEach(({ deg, label }) => {
+    const cDeltaAz = ((deg - arState.azimuth + 540) % 360) - 180;
+    if (Math.abs(cDeltaAz) < 50) {
+      const cx = w / 2 + (cDeltaAz / 50) * (w / 2);
+      const cy = horizonY > 0 && horizonY < h ? horizonY : h - 30;
+      ctx.fillStyle = deg % 90 === 0 ? '#4fd1e8' : 'rgba(238, 242, 248, 0.6)';
+      ctx.font = deg % 90 === 0 ? 'bold 12px sans-serif' : '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, cx, cy + 18);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 4);
+      ctx.lineTo(cx, cy + 4);
+      ctx.strokeStyle = '#4fd1e8';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  });
+
+  // Pass Orbit Arc
+  const pass = currentVisiblePasses[arState.passIndex];
+  if (pass) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(232, 181, 79, 0.4)';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+
+    const samples = 20;
+    let started = false;
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples;
+      const curAz = pass.startAz + (pass.endAz - pass.startAz) * t;
+      const curElev = 10 + Math.sin(t * Math.PI) * (pass.maxElev - 10);
+
+      const pDeltaAz = ((curAz - arState.azimuth + 540) % 360) - 180;
+      const pDeltaElev = curElev - arState.pitch;
+
+      const px = w / 2 + (pDeltaAz / 50) * (w / 2);
+      const py = h / 2 - (pDeltaElev / 40) * (h / 2);
+
+      if (!started) {
+        ctx.moveTo(px, py);
+        started = true;
+      } else {
+        ctx.lineTo(px, py);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function loopAR() {
+  if (!arState.active) return;
+  updateARGuidance();
+  renderARCanvas();
+  arState.animId = requestAnimationFrame(loopAR);
+}
+
+function handleOrientation(e) {
+  if (!arState.active || arState.manualMode) return;
+
+  // Heading (Azimuth)
+  let heading = 0;
+  if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
+    heading = e.webkitCompassHeading;
+  } else if (e.alpha !== null && !isNaN(e.alpha)) {
+    heading = (360 - e.alpha) % 360;
+  }
+
+  // Pitch (Elevation)
+  let pitch = 45;
+  if (e.beta !== null && !isNaN(e.beta)) {
+    pitch = Math.max(-20, Math.min(90, 90 - e.beta));
+  }
+
+  arState.azimuth = Math.round(heading);
+  arState.pitch = Math.round(pitch);
+}
+
+async function requestARSensorPermission() {
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const res = await DeviceOrientationEvent.requestPermission();
+      if (res === 'granted') {
+        if (els.arSensorPrompt) els.arSensorPrompt.hidden = true;
+        arState.manualMode = false;
+      } else {
+        arState.manualMode = true;
+      }
+    }
+  } catch (err) {
+    console.warn('Orientation permission error:', err);
+    arState.manualMode = true;
+  }
+}
+
+async function startARCamera() {
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('お使いの環境はカメラアクセスに対応していません');
+      return;
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false,
+    });
+    arState.mediaStream = stream;
+    if (els.arVideo) {
+      els.arVideo.srcObject = stream;
+      els.arVideo.hidden = false;
+      els.arVideo.play();
+    }
+    arState.cameraActive = true;
+    if (els.arCamBtn) els.arCamBtn.classList.add('active');
+    if (els.arCamText) els.arCamText.textContent = '夜空HUD';
+    if (els.arCanvas) els.arCanvas.style.opacity = '0.35'; // Keep HUD overlay visible over camera
+  } catch (err) {
+    console.warn('Camera failed:', err);
+    alert('カメラの起動に失敗しました（夜空HUDモードで動作します）');
+    stopARCamera();
+  }
+}
+
+function stopARCamera() {
+  if (arState.mediaStream) {
+    arState.mediaStream.getTracks().forEach(t => t.stop());
+    arState.mediaStream = null;
+  }
+  if (els.arVideo) {
+    els.arVideo.srcObject = null;
+    els.arVideo.hidden = true;
+  }
+  arState.cameraActive = false;
+  if (els.arCamBtn) els.arCamBtn.classList.remove('active');
+  if (els.arCamText) els.arCamText.textContent = 'AR実景';
+  if (els.arCanvas) els.arCanvas.style.opacity = '1';
+}
+
+function renderARPassTabs() {
+  if (!els.arPassTabs) return;
+  els.arPassTabs.innerHTML = currentVisiblePasses.map((p, idx) => `
+    <button class="ar-pass-tab ${arState.passIndex === idx ? 'active' : ''}" onclick="selectARPass(${idx})">
+      #${idx + 1} ${p.dateStr} (${p.maxElev}°)
+    </button>
+  `).join('');
+}
+
+window.selectARPass = function(idx) {
+  arState.passIndex = idx;
+  renderARPassTabs();
+  const pass = currentVisiblePasses[idx];
+  if (els.arPassSummary && pass) {
+    els.arPassSummary.textContent = `${pass.dateStr} 最大仰角 ${pass.maxElev}° (${pass.qualityLabel})`;
+  }
+};
+
+window.openARNavigator = function(passIndex = 0) {
+  if (!els.arNavModal) return;
+  arState.active = true;
+  arState.passIndex = passIndex;
+  els.arNavModal.hidden = false;
+  document.body.style.overflow = 'hidden';
+
+  renderARPassTabs();
+  selectARPass(passIndex);
+
+  // Check iOS permission requirement
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    if (els.arSensorPrompt) els.arSensorPrompt.hidden = false;
+  } else {
+    if (els.arSensorPrompt) els.arSensorPrompt.hidden = true;
+  }
+
+  window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+  window.addEventListener('deviceorientation', handleOrientation, true);
+
+  cancelAnimationFrame(arState.animId);
+  loopAR();
+};
+
+window.closeARNavigator = function() {
+  if (!els.arNavModal) return;
+  arState.active = false;
+  stopARCamera();
+  els.arNavModal.hidden = true;
+  document.body.style.overflow = '';
+  window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
+  window.removeEventListener('deviceorientation', handleOrientation, true);
+  cancelAnimationFrame(arState.animId);
+};
+
+// Setup AR Touch / Mouse Drag for Manual Mode & Fallback
+if (els.arViewport) {
+  const onDragStart = (cx, cy) => {
+    arState.dragStart = { x: cx, y: cy, az: arState.azimuth, pt: arState.pitch };
+  };
+  const onDragMove = (cx, cy) => {
+    if (!arState.dragStart) return;
+    const dx = cx - arState.dragStart.x;
+    const dy = cy - arState.dragStart.y;
+    arState.azimuth = Math.round((arState.dragStart.az - dx * 0.3 + 360) % 360);
+    arState.pitch = Math.round(Math.max(-10, Math.min(90, arState.dragStart.pt + dy * 0.3)));
+  };
+  const onDragEnd = () => {
+    arState.dragStart = null;
+  };
+
+  els.arViewport.addEventListener('mousedown', (e) => onDragStart(e.clientX, e.clientY));
+  window.addEventListener('mousemove', (e) => onDragMove(e.clientX, e.clientY));
+  window.addEventListener('mouseup', onDragEnd);
+
+  els.arViewport.addEventListener('touchstart', (e) => {
+    if (e.touches[0]) onDragStart(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  els.arViewport.addEventListener('touchmove', (e) => {
+    if (e.touches[0]) onDragMove(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  els.arViewport.addEventListener('touchend', onDragEnd);
+}
+
+// AR UI Control Listeners
+els.openArBtn?.addEventListener('click', () => openARNavigator(0));
+els.arCloseBtn?.addEventListener('click', closeARNavigator);
+els.arSensorPermBtn?.addEventListener('click', requestARSensorPermission);
+
+els.arCamBtn?.addEventListener('click', () => {
+  if (arState.cameraActive) {
+    stopARCamera();
+  } else {
+    startARCamera();
+  }
+});
+
+els.arSoundBtn?.addEventListener('click', () => {
+  arState.soundEnabled = !arState.soundEnabled;
+  if (els.arSoundBtn) {
+    els.arSoundBtn.textContent = arState.soundEnabled ? '🔊' : '🔇';
+  }
+});
+
+els.arHelpBtn?.addEventListener('click', () => {
+  if (els.arHelpModalOverlay) els.arHelpModalOverlay.hidden = false;
+});
+els.arHelpModalClose?.addEventListener('click', () => {
+  if (els.arHelpModalOverlay) els.arHelpModalOverlay.hidden = true;
+});
+els.arHelpConfirmBtn?.addEventListener('click', () => {
+  if (els.arHelpModalOverlay) els.arHelpModalOverlay.hidden = true;
+});
+
+// Phase Selector
+document.querySelectorAll('.ar-phase-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    document.querySelectorAll('.ar-phase-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    arState.phase = btn.dataset.phase || 'peak';
+    updateARGuidance();
+  });
+});
+
+// Mode Toggle (Sensor vs Drag)
+els.arModeToggle?.addEventListener('click', () => {
+  arState.manualMode = !arState.manualMode;
+  if (els.arModeToggle) {
+    els.arModeToggle.textContent = arState.manualMode ? '👆 画面ドラッグ操作中' : '🧭 センサー連動中';
+    els.arModeToggle.classList.toggle('manual', arState.manualMode);
+  }
+  if (els.arSnapBtn) {
+    els.arSnapBtn.hidden = !arState.manualMode;
+  }
+});
+
+els.arSnapBtn?.addEventListener('click', () => {
+  const target = getARTargetCoords();
+  arState.azimuth = target.az;
+  arState.pitch = target.elev;
+  updateARGuidance();
+});
 
 /* ---------------- 初期化 ---------------- */
 els.refreshBtn?.addEventListener('click', loadISS);

@@ -1034,10 +1034,616 @@ footer{
 }
 .c-preset-btn:hover{background:var(--gold); color:#070b14;}
 
+/* ==========================================================
+   ISS AR Sky Navigator Styles (v1.4)
+   ========================================================== */
+.iss-passes-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.btn-ar-nav{
+  background:linear-gradient(135deg, #e8b54f, #f59e0b);
+  color:#070b14;
+  font-weight:700;
+  font-size:11px;
+  padding:4px 10px;
+  border-radius:8px;
+  border:none;
+  cursor:pointer;
+  box-shadow:0 0 10px rgba(232,181,79,0.4);
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  transition:all 0.2s;
+  white-space:nowrap;
+}
+.btn-ar-nav:hover{
+  transform:scale(1.03);
+  box-shadow:0 0 14px rgba(232,181,79,0.6);
+}
+.btn-cd-ar{
+  background:#e8b54f;
+  color:#070b14;
+  font-weight:700;
+  font-size:10px;
+  padding:2px 8px;
+  border-radius:6px;
+  border:none;
+  cursor:pointer;
+  transition:background 0.2s;
+  white-space:nowrap;
+}
+.btn-cd-ar:hover{
+  background:#fef08a;
+}
+.btn-card-ar{
+  background:rgba(232,181,79,0.15);
+  color:#e8b54f;
+  border:1px solid rgba(232,181,79,0.5);
+  font-size:10px;
+  font-weight:700;
+  padding:2px 6px;
+  border-radius:6px;
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+  cursor:pointer;
+  transition:all 0.2s;
+  margin-left:auto;
+}
+.pass-card:hover .btn-card-ar{
+  background:#e8b54f;
+  color:#070b14;
+}
+
+/* Fullscreen AR Modal */
+.ar-modal{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  background:#070b14;
+  color:#eef2f8;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  user-select:none;
+  touch-action:none;
+}
+.ar-modal[hidden]{
+  display:none !important;
+}
+.ar-viewport{
+  position:absolute;
+  inset:0;
+  z-index:0;
+  overflow:hidden;
+  cursor:grab;
+}
+.ar-viewport:active{
+  cursor:grabbing;
+}
+.ar-video{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  pointer-events:none;
+}
+.ar-canvas{
+  width:100%;
+  height:100%;
+  display:block;
+  pointer-events:none;
+}
+
+/* Center Crosshair */
+.ar-crosshair{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none;
+}
+.ar-crosshair-ring{
+  width:180px;
+  height:180px;
+  border:1px solid rgba(255,255,255,0.2);
+  border-radius:50%;
+  position:relative;
+}
+.ar-crosshair-dot{
+  position:absolute;
+  width:4px;
+  height:4px;
+  background:var(--cyan);
+  border-radius:50%;
+  box-shadow:0 0 6px var(--cyan);
+}
+.ar-crosshair-line{
+  position:absolute;
+  background:rgba(255,255,255,0.12);
+}
+.ar-crosshair-line.h{
+  width:100%;
+  height:1px;
+}
+.ar-crosshair-line.v{
+  height:100%;
+  width:1px;
+}
+
+/* Target Marker (Projected in 3D Space) */
+.ar-target-marker{
+  position:absolute;
+  transform:translate(-50%, -50%);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  pointer-events:none;
+  z-index:10;
+  transition:left 0.05s linear, top 0.05s linear;
+}
+.ar-target-pulse{
+  position:relative;
+  width:72px;
+  height:72px;
+  border:2px solid var(--gold);
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 0 16px rgba(232,181,79,0.7);
+  background:rgba(232,181,79,0.15);
+}
+.ar-target-marker.locked .ar-target-pulse{
+  border-color:#4ee08a;
+  box-shadow:0 0 24px #4ee08a;
+  background:rgba(78,224,138,0.25);
+  animation:targetPulse 1.2s infinite;
+}
+@keyframes targetPulse{
+  0%, 100%{transform:scale(1);}
+  50%{transform:scale(1.1);}
+}
+.ar-target-icon{
+  font-size:24px;
+  animation:targetBob 2s infinite ease-in-out;
+}
+@keyframes targetBob{
+  0%, 100%{transform:translateY(0);}
+  50%{transform:translateY(-3px);}
+}
+.ar-target-ring{
+  position:absolute;
+  inset:-4px;
+  border:1px dashed rgba(255,255,255,0.5);
+  border-radius:50%;
+  animation:spinSlow 12s linear infinite;
+}
+@keyframes spinSlow{
+  to{transform:rotate(360deg);}
+}
+.ar-target-label{
+  margin-top:6px;
+  background:rgba(16,26,44,0.92);
+  border:1px solid var(--gold);
+  padding:4px 8px;
+  border-radius:8px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  font-size:11px;
+  color:var(--text);
+  box-shadow:0 4px 12px rgba(0,0,0,0.5);
+  white-space:nowrap;
+}
+.ar-target-marker.locked .ar-target-label{
+  background:#4ee08a;
+  color:#070b14;
+  border-color:#4ee08a;
+  font-weight:700;
+}
+.ar-target-label strong{font-size:12px; color:#fef08a;}
+.ar-target-marker.locked .ar-target-label strong{color:#070b14;}
+.ar-target-label span{font-size:10px; opacity:0.9;}
+
+/* Off-screen Direction Arrow */
+.ar-offscreen-arrow-wrap{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none;
+  z-index:8;
+}
+.ar-offscreen-arrow{
+  background:var(--gold);
+  color:#070b14;
+  font-weight:700;
+  font-size:11px;
+  padding:5px 10px;
+  border-radius:999px;
+  box-shadow:0 0 16px rgba(232,181,79,0.8);
+  display:flex;
+  align-items:center;
+  gap:4px;
+  animation:arrowPulse 1.2s infinite;
+}
+@keyframes arrowPulse{
+  0%, 100%{transform:scale(1);}
+  50%{transform:scale(1.08);}
+}
+.ar-arrow-icon{
+  font-size:14px;
+  display:inline-block;
+  transform:rotate(-45deg);
+}
+
+/* Header Overlay */
+.ar-header{
+  position:relative;
+  z-index:20;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 16px;
+  background:linear-gradient(180deg, rgba(7,11,20,0.95), rgba(7,11,20,0.6), transparent);
+}
+.ar-header-title{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.ar-logo-icon{font-size:20px;}
+.ar-title-row{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.ar-title-row strong{font-size:14px; letter-spacing:0.02em;}
+.badge-version{
+  font-size:9.5px;
+  background:rgba(79,209,232,0.2);
+  color:var(--cyan);
+  padding:1px 5px;
+  border-radius:4px;
+  font-family:monospace;
+}
+.ar-subtitle{
+  font-size:11px;
+  color:var(--text-dim);
+}
+.ar-header-actions{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.ar-btn-icon{
+  background:rgba(16,26,44,0.8);
+  border:1px solid var(--line);
+  color:var(--text);
+  font-size:13px;
+  width:32px;
+  height:32px;
+  border-radius:8px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.ar-btn-cam{
+  background:rgba(16,26,44,0.8);
+  border:1px solid var(--line);
+  color:var(--text);
+  font-size:11px;
+  font-weight:600;
+  padding:5px 10px;
+  border-radius:8px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  gap:4px;
+  transition:all 0.2s;
+}
+.ar-btn-cam.active{
+  background:rgba(78,224,138,0.25);
+  border-color:#4ee08a;
+  color:#4ee08a;
+  box-shadow:0 0 10px rgba(78,224,138,0.3);
+}
+.ar-btn-close{
+  background:rgba(16,26,44,0.8);
+  border:1px solid var(--line);
+  color:var(--text-dim);
+  font-size:14px;
+  width:32px;
+  height:32px;
+  border-radius:8px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:all 0.2s;
+}
+.ar-btn-close:hover{
+  background:rgba(239,68,68,0.2);
+  border-color:#ef4444;
+  color:#ef4444;
+}
+
+/* Guidance Container & Banner */
+.ar-guidance-container{
+  position:relative;
+  z-index:20;
+  padding:0 14px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+}
+.ar-guidance-card{
+  width:100%;
+  max-width:440px;
+  background:rgba(14,22,38,0.92);
+  border:1px solid rgba(232,181,79,0.5);
+  border-radius:14px;
+  padding:8px 12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  box-shadow:0 4px 18px rgba(0,0,0,0.4);
+  backdrop-filter:blur(8px);
+  transition:all 0.3s;
+}
+.ar-guidance-card.locked{
+  background:linear-gradient(90deg, rgba(78,224,138,0.3), rgba(78,224,138,0.4), rgba(78,224,138,0.3));
+  border-color:#4ee08a;
+  box-shadow:0 0 24px rgba(78,224,138,0.5);
+  animation:lockGlow 1.5s infinite;
+}
+@keyframes lockGlow{
+  0%, 100%{box-shadow:0 0 20px rgba(78,224,138,0.4);}
+  50%{box-shadow:0 0 32px rgba(78,224,138,0.7);}
+}
+.ar-guidance-main{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.ar-compass-icon{
+  width:32px;
+  height:32px;
+  background:rgba(232,181,79,0.2);
+  border:1px solid var(--gold);
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:16px;
+  flex-shrink:0;
+}
+.ar-instructions{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+.ar-inst-label{
+  font-size:10px;
+  color:var(--text-dim);
+}
+.ar-inst-text{
+  font-size:12px;
+  font-weight:700;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.ar-inst-locked{
+  color:#4ee08a;
+  font-size:13px;
+  font-weight:800;
+}
+.ar-badge-inst{
+  padding:2px 6px;
+  border-radius:4px;
+  font-size:11px;
+}
+.ar-badge-inst.right, .ar-badge-inst.left{
+  background:rgba(245,158,11,0.2);
+  color:#fef08a;
+}
+.ar-badge-inst.up, .ar-badge-inst.down{
+  background:rgba(79,209,232,0.2);
+  color:var(--cyan);
+}
+.ar-badge-inst.match{
+  background:rgba(78,224,138,0.2);
+  color:#4ee08a;
+}
+.ar-angles{
+  display:flex;
+  flex-direction:column;
+  font-size:10px;
+  font-family:monospace;
+  color:var(--text-dim);
+  border-left:1px solid rgba(255,255,255,0.12);
+  padding-left:8px;
+  flex-shrink:0;
+  text-align:right;
+}
+
+.ar-sensor-prompt{
+  background:var(--gold);
+  color:#070b14;
+  padding:6px 12px;
+  border-radius:8px;
+  font-weight:700;
+  font-size:11px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.3);
+}
+.btn-primary-sm{
+  background:#070b14;
+  color:var(--gold);
+  border:none;
+  padding:3px 8px;
+  border-radius:4px;
+  font-weight:700;
+  font-size:10px;
+  cursor:pointer;
+}
+
+/* Bottom Controls */
+.ar-bottom-bar{
+  margin-top:auto;
+  position:relative;
+  z-index:20;
+  padding:12px 14px;
+  background:linear-gradient(0deg, rgba(7,11,20,0.98), rgba(7,11,20,0.8), transparent);
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.ar-pass-tabs{
+  display:flex;
+  gap:6px;
+  overflow-x:auto;
+  padding-bottom:2px;
+  scrollbar-width:none;
+}
+.ar-pass-tabs::-webkit-scrollbar{display:none;}
+.ar-pass-tab{
+  background:rgba(16,26,44,0.85);
+  border:1px solid var(--line);
+  color:var(--text-dim);
+  font-size:11px;
+  font-weight:600;
+  padding:5px 10px;
+  border-radius:8px;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:all 0.2s;
+}
+.ar-pass-tab.active{
+  background:var(--gold);
+  color:#070b14;
+  font-weight:700;
+  border-color:var(--gold);
+  box-shadow:0 0 10px rgba(232,181,79,0.5);
+}
+.ar-controls-panel{
+  background:rgba(14,22,38,0.92);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:8px 10px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  flex-wrap:wrap;
+  backdrop-filter:blur(8px);
+}
+.ar-phase-selector{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.ar-phase-label{
+  font-size:11px;
+  color:var(--text-dim);
+}
+.ar-phase-group{
+  display:inline-flex;
+  background:#070b14;
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:2px;
+}
+.ar-phase-btn{
+  background:transparent;
+  border:none;
+  color:var(--text-dim);
+  font-size:10px;
+  font-weight:600;
+  padding:4px 8px;
+  border-radius:4px;
+  cursor:pointer;
+  transition:all 0.2s;
+}
+.ar-phase-btn.active{
+  background:var(--gold);
+  color:#070b14;
+  font-weight:700;
+}
+.ar-mode-controls{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.ar-mode-btn{
+  background:var(--bg-card);
+  border:1px solid var(--line);
+  color:var(--text-dim);
+  font-size:10px;
+  padding:4px 8px;
+  border-radius:6px;
+  cursor:pointer;
+}
+.ar-mode-btn.manual{
+  background:rgba(245,158,11,0.2);
+  border-color:#f59e0b;
+  color:#fef08a;
+}
+.ar-snap-btn{
+  background:var(--bg-card);
+  border:1px solid var(--line);
+  color:var(--cyan);
+  font-size:10px;
+  padding:4px 8px;
+  border-radius:6px;
+  cursor:pointer;
+}
+.ar-foot-tip{
+  font-size:10px;
+  color:var(--text-dim);
+  text-align:center;
+}
+
+/* Help Modal inside AR */
+.ar-help-modal{
+  max-width:380px;
+}
+.ar-help-step{
+  background:var(--bg-card);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:10px;
+  margin-bottom:8px;
+  font-size:12px;
+}
+.ar-help-step strong{
+  display:block;
+  color:var(--gold);
+  margin-bottom:4px;
+}
+.ar-help-step p{
+  margin:0;
+  color:var(--text-dim);
+  line-height:1.4;
+}
+
 @media (max-width:760px){
-  .celestial-sun{display:none;}
-  .celestial-divider{display:none;}
-  .moon-name-text{display:none;}
+  .iss-passes-list{grid-template-columns:1fr;}
+  .ar-controls-panel{flex-direction:column; align-items:stretch;}
+  .ar-phase-selector{justify-content:space-between;}
+  .ar-mode-controls{justify-content:space-between;}
 }
 @media (max-width:540px){
   .celestial-widget{padding:4px 8px;}

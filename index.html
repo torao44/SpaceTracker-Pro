@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260924-2">
+<link rel="stylesheet" href="style.css?v=20260925-ar1">
 </head>
 <body>
 
@@ -116,7 +116,10 @@
             <span id="issPassesNotice"></span>
             <span class="iss-passes-loc" id="issPassesLoc">📍 現在地 付近</span>
           </div>
-          <a id="issHeavensLink" href="https://www.heavens-above.com/" target="_blank" rel="noopener" class="link-heavens">全予報 ↗</a>
+          <div class="iss-passes-actions">
+            <button id="openArBtn" class="btn-ar-nav" title="スマホを空に向けてISSを探すARナビを起動">📱 空を向く ARナビ</button>
+            <a id="issHeavensLink" href="https://www.heavens-above.com/" target="_blank" rel="noopener" class="link-heavens">全予報 ↗</a>
+          </div>
         </div>
         <!-- 次回可視通過までのリアルタイムカウントダウン -->
         <div class="pass-countdown-banner" id="issPassCountdown" hidden></div>
@@ -213,11 +216,11 @@
 
 <footer>
   <p>データ提供: Where the ISS at?, Open Notify, The Space Devs (Launch Library 2), Heavens-Above</p>
-  <p class="version-tag">Build: 2026-09-24-4</p>
+  <p class="version-tag">Build: 2026-09-25 (v1.4.0 AR Sky Navigator)</p>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/satellite.js@4.1.4/dist/satellite.min.js"></script>
-<script src="app.js?v=20260924-4" defer></script>
+<script src="app.js?v=20260925-ar1" defer></script>
 
 <!-- ===== Crew Detail Modal ===== -->
 <div class="modal-overlay" id="crewModalOverlay" hidden>
@@ -232,6 +235,134 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="celestialModalTitle">
     <button class="modal-close" id="celestialModalClose" aria-label="閉じる">✕</button>
     <div class="modal-body" id="celestialModalBody"></div>
+  </div>
+</div>
+
+<!-- ===== AR Sky Navigator Fullscreen Modal ===== -->
+<div class="ar-modal" id="arNavModal" hidden>
+  <!-- Background: Camera Stream or Starry Virtual Sky Canvas -->
+  <div class="ar-viewport" id="arViewport">
+    <video id="arVideo" playsinline muted autoplay class="ar-video" hidden></video>
+    <canvas id="arCanvas" class="ar-canvas"></canvas>
+    
+    <!-- Central HUD Aim Reticle -->
+    <div class="ar-crosshair" aria-hidden="true">
+      <div class="ar-crosshair-ring"></div>
+      <div class="ar-crosshair-dot"></div>
+      <div class="ar-crosshair-line h"></div>
+      <div class="ar-crosshair-line v"></div>
+    </div>
+
+    <!-- 3D Target Marker (Shown when target is in FOV) -->
+    <div class="ar-target-marker" id="arTargetMarker" hidden>
+      <div class="ar-target-pulse">
+        <span class="ar-target-icon">🛰️</span>
+        <div class="ar-target-ring"></div>
+      </div>
+      <div class="ar-target-label" id="arTargetLabel">
+        <strong>ISS (国際宇宙ステーション)</strong>
+        <span id="arTargetSub">最大仰角 68° (南西)</span>
+      </div>
+    </div>
+
+    <!-- Off-screen Direction Arrow (Shown when target is outside FOV) -->
+    <div class="ar-offscreen-arrow-wrap" id="arOffscreenWrap">
+      <div class="ar-offscreen-arrow" id="arOffscreenArrow">
+        <span class="ar-arrow-icon">➤</span>
+        <span class="ar-arrow-text">ISS 方向へ</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Navigation & Controls Overlay -->
+  <header class="ar-header">
+    <div class="ar-header-title">
+      <span class="ar-logo-icon">🧭</span>
+      <div>
+        <div class="ar-title-row">
+          <strong>ISS 空向け ARナビ</strong>
+          <span class="badge-version">v1.4</span>
+        </div>
+        <div class="ar-subtitle" id="arPassSummary">次回通過予定</div>
+      </div>
+    </div>
+    <div class="ar-header-actions">
+      <button id="arSoundBtn" class="ar-btn-icon" title="音声切替">🔊</button>
+      <button id="arCamBtn" class="ar-btn-cam" title="カメラAR実景モード切替">📷 <span id="arCamText">AR実景</span></button>
+      <button id="arHelpBtn" class="ar-btn-icon" title="ヘルプ・コンパス補正">❓</button>
+      <button id="arCloseBtn" class="ar-btn-close" aria-label="閉じる">✕</button>
+    </div>
+  </header>
+
+  <!-- Real-time Navigation Guidance Banner ("もっと右", "もっと上", "ロックオン") -->
+  <div class="ar-guidance-container">
+    <div class="ar-guidance-card" id="arGuidanceCard">
+      <div class="ar-guidance-main">
+        <div class="ar-compass-icon" id="arCompassIcon">🧭</div>
+        <div class="ar-instructions">
+          <div class="ar-inst-label">ナビゲーション指示</div>
+          <div class="ar-inst-text" id="arInstructionsText">スマホを空に向けてください</div>
+        </div>
+      </div>
+      <div class="ar-angles" id="arAnglesText">
+        <span>方位: --°</span>
+        <span>仰角: --°</span>
+      </div>
+    </div>
+    
+    <!-- iOS 13+ DeviceOrientation permission banner if needed -->
+    <div class="ar-sensor-prompt" id="arSensorPrompt" hidden>
+      <span>🧭 傾き・方角センサーの利用を許可してください</span>
+      <button id="arSensorPermBtn" class="btn-primary-sm">センサーを許可</button>
+    </div>
+  </div>
+
+  <!-- Bottom Phase Selector & Control Bar -->
+  <div class="ar-bottom-bar">
+    <!-- Pass Selector Pills -->
+    <div class="ar-pass-tabs" id="arPassTabs"></div>
+
+    <!-- Phase Selector (Peak / Start / End) -->
+    <div class="ar-controls-panel">
+      <div class="ar-phase-selector">
+        <span class="ar-phase-label">目標点:</span>
+        <div class="ar-phase-group">
+          <button class="ar-phase-btn" data-phase="start">出現点 (10°)</button>
+          <button class="ar-phase-btn active" data-phase="peak">最大仰角 (ピーク)</button>
+          <button class="ar-phase-btn" data-phase="end">消滅点 (10°)</button>
+        </div>
+      </div>
+
+      <div class="ar-mode-controls">
+        <button id="arModeToggle" class="ar-mode-btn">🧭 センサー連動中</button>
+        <button id="arSnapBtn" class="ar-snap-btn" hidden title="ターゲット方向に瞬時に視点を合わせる">🎯 ターゲットへ</button>
+      </div>
+    </div>
+    
+    <div class="ar-foot-tip">※ スマホを空に向け、指示に従って向きと高さを合わせます（画面ドラッグでも周囲を見渡せます）</div>
+  </div>
+
+  <!-- Help & 8-figure Calibration Modal -->
+  <div class="modal-overlay" id="arHelpModalOverlay" hidden>
+    <div class="modal ar-help-modal">
+      <button class="modal-close" id="arHelpModalClose">✕</button>
+      <div class="modal-body">
+        <h3>🧭 ARナビの使い方とコンパス補正</h3>
+        <div class="ar-help-step">
+          <strong>1. スマホを空に向けて立ちます</strong>
+          <p>画面の「もっと右へ」「もっと上へ」の指示に従って体を回し、スマホを空へ傾けてください。</p>
+        </div>
+        <div class="ar-help-step">
+          <strong>2. 電子コンパスの「8の字」補正</strong>
+          <p>方角がずれる場合は、スマホを手首を使って空中で「8の字（∞）」を描くように2〜3回回すと精度が回復します。</p>
+        </div>
+        <div class="ar-help-step">
+          <strong>3. カメラAR実景モード</strong>
+          <p>「AR実景」ボタンを押すと、背面の実際の夜空映像の上にISSのターゲットレティクルを重ねて表示できます。</p>
+        </div>
+        <button id="arHelpConfirmBtn" class="btn-primary" style="width:100%;margin-top:12px;">了解しました</button>
+      </div>
+    </div>
   </div>
 </div>
 
