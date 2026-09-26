@@ -1462,16 +1462,24 @@ function updateARGuidance() {
     if (els.arTargetSub) {
       els.arTargetSub.textContent = `${target.label} (方角 ${target.az}° / 仰角 ${target.elev}°)`;
     }
-    if (els.arOffscreenWrap) {
-      els.arOffscreenWrap.hidden = true;
-    }
   } else {
     if (els.arTargetMarker) els.arTargetMarker.hidden = true;
-    if (els.arOffscreenWrap && els.arOffscreenArrow) {
+  }
+
+  // Continuous 360° Guidance Arrow (Always guides user until locked)
+  if (els.arOffscreenWrap && els.arOffscreenArrow) {
+    if (!isLocked) {
       els.arOffscreenWrap.hidden = false;
       const rad = Math.atan2(-deltaElev, deltaAz);
-      const deg = (rad * 180) / Math.PI;
-      els.arOffscreenArrow.style.transform = `rotate(${deg}deg) translateX(min(38vw, 150px)) rotate(${-deg}deg)`;
+      const deg = Number.isFinite((rad * 180) / Math.PI) ? (rad * 180) / Math.PI : 0;
+      els.arOffscreenArrow.style.transform = `rotate(${deg}deg) translateX(min(38vw, 140px)) rotate(${-deg}deg)`;
+      const totalDiff = Math.round(Math.sqrt(deltaAz * deltaAz + deltaElev * deltaElev));
+      const textSpan = els.arOffscreenArrow.querySelector('.ar-arrow-text');
+      if (textSpan) textSpan.textContent = `ISS 方向へ ${totalDiff > 0 ? `(${totalDiff}°)` : ''}`;
+      const iconSpan = els.arOffscreenArrow.querySelector('.ar-arrow-icon');
+      if (iconSpan) iconSpan.style.transform = `rotate(${deg}deg)`;
+    } else {
+      els.arOffscreenWrap.hidden = true;
     }
   }
 }
@@ -1621,14 +1629,20 @@ function handleOrientation(e) {
     heading = (360 - e.alpha) % 360;
   }
 
-  // Pitch (Elevation)
+  // Pitch (Elevation) - 0° = Horizon, 90° = Zenith
   let pitch = 45;
   if (e.beta !== null && !isNaN(e.beta)) {
-    pitch = Math.max(-20, Math.min(90, 90 - e.beta));
+    const beta = e.beta;
+    if (beta >= 0) {
+      pitch = beta - 90;
+    } else {
+      pitch = Math.abs(beta) - 90;
+    }
+    pitch = Math.max(-30, Math.min(90, pitch));
   }
 
-  arState.azimuth = Math.round(heading);
-  arState.pitch = Math.round(pitch);
+  if (Number.isFinite(heading)) arState.azimuth = Math.round((heading + 360) % 360);
+  if (Number.isFinite(pitch)) arState.pitch = Math.round(pitch);
 }
 
 async function requestARSensorPermission() {
@@ -2419,6 +2433,12 @@ function stopConstelCamera() {
 }
 
 function initConstelOrientation() {
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    if (els.arConstelSensorPrompt) els.arConstelSensorPrompt.hidden = false;
+  } else {
+    if (els.arConstelSensorPrompt) els.arConstelSensorPrompt.hidden = true;
+  }
+
   const onOrientation = (e) => {
     if (arConstelState.manualMode || !arConstelState.active) return;
     let heading = 0;
@@ -2427,13 +2447,21 @@ function initConstelOrientation() {
     } else if (e.alpha !== null) {
       heading = (360 - e.alpha) % 360;
     }
+    // Pitch (Elevation) - 0° = Horizon, 90° = Zenith
     let p = 45;
-    if (e.beta !== null) {
-      p = Math.max(-10, Math.min(90, e.beta));
+    if (e.beta !== null && !isNaN(e.beta)) {
+      const beta = e.beta;
+      if (beta >= 0) {
+        p = beta - 90;
+      } else {
+        p = Math.abs(beta) - 90;
+      }
+      p = Math.max(-30, Math.min(90, p));
     }
-    arConstelState.azimuth = Math.round(heading);
-    arConstelState.pitch = Math.round(p);
+    if (Number.isFinite(heading)) arConstelState.azimuth = Math.round((heading + 360) % 360);
+    if (Number.isFinite(p)) arConstelState.pitch = Math.round(p);
   };
+  window.addEventListener('deviceorientationabsolute', onOrientation, true);
   window.addEventListener('deviceorientation', onOrientation, true);
 }
 
@@ -2547,19 +2575,21 @@ function startConstelLoop() {
       els.arConstelGuideCard.classList.toggle('locked', isLocked);
     }
 
-    // Offscreen guidance arrow
+    // Continuous 360° guidance arrow (Always guides user until locked)
     if (els.arConstelOffscreen) {
-      const isOff = !isLocked && (Math.abs(deltaAz) > 28 || Math.abs(deltaElev) > 22);
-      els.arConstelOffscreen.style.display = isOff ? 'flex' : 'none';
-      if (isOff) {
+      els.arConstelOffscreen.style.display = !isLocked ? 'flex' : 'none';
+      if (!isLocked) {
         const rad = Math.atan2(-deltaElev, deltaAz);
-        const deg = (rad * 180) / Math.PI;
+        const deg = Number.isFinite((rad * 180) / Math.PI) ? (rad * 180) / Math.PI : 0;
         if (els.arConstelOffArrow) els.arConstelOffArrow.style.transform = `rotate(${deg}deg)`;
         if (els.arConstelOffText) {
-          let t = '';
-          if (Math.abs(deltaAz) > 12) t += (deltaAz > 0 ? `右へ ${Math.round(deltaAz)}° ` : `左へ ${Math.round(-deltaAz)}° `);
-          if (Math.abs(deltaElev) > 12) t += (deltaElev > 0 ? `見上げる ↑ ${Math.round(deltaElev)}°` : `見下ろす ↓ ${Math.round(-deltaElev)}°`);
-          els.arConstelOffText.textContent = t || '方向を調整中';
+          const totalDiff = Math.round(Math.sqrt(deltaAz * deltaAz + deltaElev * deltaElev));
+          let t = `${target.nameJa}へ (${totalDiff}°) `;
+          if (deltaAz > 5) t += `👉 右へ `;
+          else if (deltaAz < -5) t += `👈 左へ `;
+          if (deltaElev > 5) t += `👆 上へ`;
+          else if (deltaElev < -5) t += `👇 下へ`;
+          els.arConstelOffText.textContent = t;
         }
       }
     }
@@ -2752,6 +2782,19 @@ function initNightSkyConstellations() {
   });
   els.arConstelHelpBtn?.addEventListener('click', () => {
     if (els.arHelpModalOverlay) els.arHelpModalOverlay.hidden = false;
+  });
+  els.arConstelSensorPermBtn?.addEventListener('click', async () => {
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res === 'granted') {
+          if (els.arConstelSensorPrompt) els.arConstelSensorPrompt.hidden = true;
+          arConstelState.manualMode = false;
+        }
+      }
+    } catch (e) {
+      console.warn('Constel orientation perm error:', e);
+    }
   });
 
   // Manual Drag on AR Canvas

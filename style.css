@@ -1272,8 +1272,8 @@ footer{
   animation:arrowPulse 1.2s infinite;
 }
 @keyframes arrowPulse{
-  0%, 100%{transform:scale(1);}
-  50%{transform:scale(1.08);}
+  0%, 100%{ opacity:1; box-shadow:0 0 16px rgba(232,181,79,0.8); }
+  50%{ opacity:0.85; box-shadow:0 0 28px rgba(232,181,79,1); }
 }
 .ar-arrow-icon{
   font-size:14px;
@@ -1897,5 +1897,241 @@ footer{
 }
 .ar-c-chip strong{display:block; font-size:11px;}
 .ar-c-chip span{display:block; font-size:9.5px; color:var(--text-dim); font-family:monospace;}
+
+/* ==========================================================
+   Constellation AR Fullscreen Modal Styles (Mobile-optimized)
+   ========================================================== */
+#arConstelModal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #000;
+  overflow: hidden;
+  touch-action: none;
+}
+#arConstelModal .ar-viewport {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+#arConstelModal .ar-video,
+#arConstelModal .ar-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+#arConstelModal .ar-canvas {
+  z-index: 2;
+}
+
+/* Top HUD Toolbar */
+.ar-top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(7, 11, 20, 0.95), rgba(7, 11, 20, 0.5), transparent);
+}
+.ar-target-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ar-target-badge .ar-target-icon {
+  font-size: 20px;
+}
+.ar-target-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.ar-target-sub {
+  font-size: 10.5px;
+  color: var(--cyan);
+  font-family: monospace;
+}
+.ar-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ar-tool-btn, .ar-close-btn {
+  background: rgba(16, 26, 44, 0.85);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 13px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.ar-tool-btn:hover {
+  background: rgba(79, 209, 232, 0.2);
+  border-color: var(--cyan);
+}
+.ar-close-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+/* Central Reticle Wrap */
+.ar-reticle-wrap {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 140px;
+  height: 140px;
+  pointer-events: none;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ar-reticle-ring {
+  width: 80px;
+  height: 80px;
+  border: 1.5px dashed rgba(79, 209, 232, 0.5);
+  border-radius: 50%;
+  animation: spinSlow 20s linear infinite;
+}
+.ar-cross-h {
+  position: absolute;
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.ar-cross-v {
+  position: absolute;
+  height: 100%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Off-screen Target Guide Arrow (Floating in AR View) */
+.ar-offscreen-wrap {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  width: 260px;
+  height: 260px;
+}
+.ar-offscreen-arrow {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(10, 20, 38, 0.95);
+  border: 2px solid var(--cyan);
+  box-shadow: 0 0 24px rgba(79, 209, 232, 0.8), inset 0 0 10px rgba(79, 209, 232, 0.4);
+  color: var(--cyan);
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease-out;
+  animation: arrowGlow 1.2s infinite alternate;
+}
+@keyframes arrowGlow {
+  0% { box-shadow: 0 0 16px rgba(79, 209, 232, 0.7); opacity: 0.85; }
+  100% { box-shadow: 0 0 32px rgba(79, 209, 232, 1); opacity: 1; }
+}
+.ar-offscreen-text {
+  margin-top: 10px;
+  background: rgba(7, 14, 28, 0.92);
+  border: 1px solid rgba(79, 209, 232, 0.6);
+  color: #eef2f8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+
+/* Constellation Real-time Guidance Banner */
+#arConstelGuideCard {
+  position: absolute;
+  bottom: 84px;
+  left: 14px;
+  right: 14px;
+  margin: 0 auto;
+  max-width: 440px;
+  z-index: 25;
+  background: rgba(14, 22, 38, 0.92);
+  border: 1px solid rgba(79, 209, 232, 0.5);
+  border-radius: 14px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s;
+}
+#arConstelGuideCard.locked {
+  background: linear-gradient(90deg, rgba(78, 224, 138, 0.35), rgba(78, 224, 138, 0.45), rgba(78, 224, 138, 0.35));
+  border-color: #4ee08a;
+  box-shadow: 0 0 26px rgba(78, 224, 138, 0.6);
+}
+.ar-guide-icon {
+  font-size: 20px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(79, 209, 232, 0.15);
+  border: 1px solid var(--cyan);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+#arConstelGuideCard.locked .ar-guide-icon {
+  border-color: #4ee08a;
+  background: rgba(78, 224, 138, 0.2);
+}
+.ar-guide-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ar-guide-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#arConstelGuideCard.locked .ar-guide-title {
+  color: #4ee08a;
+}
+.ar-guide-sub {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: monospace;
+  margin-top: 2px;
+}
 
 
