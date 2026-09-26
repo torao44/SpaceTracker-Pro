@@ -1256,29 +1256,33 @@ footer{
   align-items:center;
   justify-content:center;
   pointer-events:none;
-  z-index:8;
+  z-index:15;
 }
 .ar-offscreen-arrow{
-  background:var(--gold);
+  background:linear-gradient(135deg, #e8b54f, #f59e0b);
   color:#070b14;
-  font-weight:700;
-  font-size:11px;
-  padding:5px 10px;
+  font-weight:800;
+  font-size:12px;
+  padding:7px 14px;
   border-radius:999px;
-  box-shadow:0 0 16px rgba(232,181,79,0.8);
+  border:1.5px solid rgba(255,255,255,0.9);
+  box-shadow:0 0 24px rgba(232,181,79,0.95), 0 4px 16px rgba(0,0,0,0.5);
   display:flex;
   align-items:center;
-  gap:4px;
+  gap:6px;
   animation:arrowPulse 1.2s infinite;
+  white-space:nowrap;
 }
 @keyframes arrowPulse{
-  0%, 100%{ opacity:1; box-shadow:0 0 16px rgba(232,181,79,0.8); }
-  50%{ opacity:0.85; box-shadow:0 0 28px rgba(232,181,79,1); }
+  0%, 100%{ opacity:1; box-shadow:0 0 18px rgba(232,181,79,0.85); }
+  50%{ opacity:0.9; box-shadow:0 0 32px rgba(232,181,79,1); }
 }
 .ar-arrow-icon{
-  font-size:14px;
-  display:inline-block;
-  transform:rotate(-45deg);
+  font-size:15px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  transform-origin:center;
 }
 
 /* Header Overlay */
@@ -1478,26 +1482,66 @@ footer{
 }
 
 .ar-sensor-prompt{
-  background:var(--gold);
+  background:linear-gradient(135deg, #e8b54f, #f59e0b);
   color:#070b14;
-  padding:6px 12px;
-  border-radius:8px;
-  font-weight:700;
-  font-size:11px;
+  padding:10px 14px;
+  border-radius:14px;
+  box-shadow:0 4px 20px rgba(232,181,79,0.45);
+  cursor:pointer;
+  user-select:none;
+  touch-action:manipulation;
+  transition:transform 0.15s, opacity 0.2s;
+  animation:promptPulse 2s infinite ease-in-out;
+}
+.ar-sensor-prompt:active{
+  transform:scale(0.98);
+}
+@keyframes promptPulse{
+  0%, 100%{ box-shadow:0 4px 18px rgba(232,181,79,0.4); }
+  50%{ box-shadow:0 6px 26px rgba(232,181,79,0.7); }
+}
+.ar-sensor-prompt-inner{
   display:flex;
   align-items:center;
-  gap:8px;
-  box-shadow:0 4px 12px rgba(0,0,0,0.3);
+  justify-content:space-between;
+  gap:10px;
+  width:100%;
+}
+.ar-sensor-icon{
+  font-size:20px;
+  flex-shrink:0;
+}
+.ar-sensor-prompt-text{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+  flex:1;
+}
+.ar-sensor-prompt-text strong{
+  font-size:12px;
+  font-weight:800;
+  color:#070b14;
+  line-height:1.3;
+}
+.ar-sensor-prompt-text span{
+  font-size:10px;
+  font-weight:600;
+  color:#1e293b;
+  line-height:1.2;
 }
 .btn-primary-sm{
   background:#070b14;
   color:var(--gold);
-  border:none;
-  padding:3px 8px;
-  border-radius:4px;
+  border:1px solid rgba(232,181,79,0.5);
+  padding:6px 12px;
+  border-radius:8px;
   font-weight:700;
-  font-size:10px;
+  font-size:11px;
   cursor:pointer;
+  white-space:nowrap;
+  flex-shrink:0;
+  box-shadow:0 2px 6px rgba(0,0,0,0.3);
 }
 
 /* Bottom Controls */

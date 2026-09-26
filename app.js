@@ -590,6 +590,9 @@ function openCrewModal(index) {
   `;
   els.crewModalOverlay.hidden = false;
   els.crewModalClose.focus();
+  if (window.location.hash !== '#crew') {
+    try { history.pushState({ modal: 'crew' }, '', '#crew'); } catch (e) {}
+  }
 }
 
 els.crewModalBody?.addEventListener('error', (e) => {
@@ -601,8 +604,11 @@ els.crewModalBody?.addEventListener('error', (e) => {
   img.replaceWith(div);
 }, true);
 
-function closeCrewModal() {
+function closeCrewModal(isFromPopState = false) {
   els.crewModalOverlay.hidden = true;
+  if (!isFromPopState && window.location.hash === '#crew') {
+    try { history.back(); } catch (e) {}
+  }
 }
 
 els.crewList?.addEventListener('click', (e) => {
@@ -1154,10 +1160,16 @@ function openCelestialModal() {
 
   els.celestialModalOverlay.hidden = false;
   els.celestialModalClose?.focus();
+  if (window.location.hash !== '#celestial') {
+    try { history.pushState({ modal: 'celestial' }, '', '#celestial'); } catch (e) {}
+  }
 }
 
-function closeCelestialModal() {
+function closeCelestialModal(isFromPopState = false) {
   if (els.celestialModalOverlay) els.celestialModalOverlay.hidden = true;
+  if (!isFromPopState && window.location.hash === '#celestial') {
+    try { history.back(); } catch (e) {}
+  }
 }
 
 els.celestialWidget?.addEventListener('click', openCelestialModal);
@@ -1307,7 +1319,7 @@ function initGalaxyCanvas() {
 }
 
 /* ==========================================================
-   ISS AR Sky Navigator Engine (v1.4)
+   ISS AR Sky Navigator Engine (v1.5.1)
    スマホを空に向けてISSの位置を探すARナビゲーション
    ========================================================== */
 const arState = {
@@ -1444,7 +1456,7 @@ function updateARGuidance() {
   // Projection FOV
   const fovH = 60;
   const fovV = 50;
-  const inFov = Math.abs(deltaAz) <= fovH / 2 && Math.abs(deltaElev) <= fovV / 2;
+  const inFov = Math.abs(deltaAz) <= 24 && Math.abs(deltaElev) <= 18;
 
   if (inFov) {
     if (els.arTargetMarker) {
@@ -1462,24 +1474,24 @@ function updateARGuidance() {
     if (els.arTargetSub) {
       els.arTargetSub.textContent = `${target.label} (方角 ${target.az}° / 仰角 ${target.elev}°)`;
     }
+    // Target is on-screen: Hide edge arrow to prevent visual clutter and confusion
+    if (els.arOffscreenWrap) {
+      els.arOffscreenWrap.hidden = true;
+    }
   } else {
     if (els.arTargetMarker) els.arTargetMarker.hidden = true;
-  }
 
-  // Continuous 360° Guidance Arrow (Always guides user until locked)
-  if (els.arOffscreenWrap && els.arOffscreenArrow) {
-    if (!isLocked) {
+    // Target is off-screen: Show clear 360° directional arrow at the screen edge
+    if (els.arOffscreenWrap && els.arOffscreenArrow) {
       els.arOffscreenWrap.hidden = false;
       const rad = Math.atan2(-deltaElev, deltaAz);
       const deg = Number.isFinite((rad * 180) / Math.PI) ? (rad * 180) / Math.PI : 0;
-      els.arOffscreenArrow.style.transform = `rotate(${deg}deg) translateX(min(38vw, 140px)) rotate(${-deg}deg)`;
+      els.arOffscreenArrow.style.transform = `rotate(${deg}deg) translateX(min(36vw, 130px)) rotate(${-deg}deg)`;
       const totalDiff = Math.round(Math.sqrt(deltaAz * deltaAz + deltaElev * deltaElev));
       const textSpan = els.arOffscreenArrow.querySelector('.ar-arrow-text');
-      if (textSpan) textSpan.textContent = `ISS 方向へ ${totalDiff > 0 ? `(${totalDiff}°)` : ''}`;
+      if (textSpan) textSpan.textContent = `ISS方向へ ${totalDiff}°`;
       const iconSpan = els.arOffscreenArrow.querySelector('.ar-arrow-icon');
       if (iconSpan) iconSpan.style.transform = `rotate(${deg}deg)`;
-    } else {
-      els.arOffscreenWrap.hidden = true;
     }
   }
 }
@@ -1652,12 +1664,19 @@ async function requestARSensorPermission() {
       if (res === 'granted') {
         if (els.arSensorPrompt) els.arSensorPrompt.hidden = true;
         arState.manualMode = false;
+        window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+        window.addEventListener('deviceorientation', handleOrientation, true);
       } else {
+        alert('センサーの利用が許可されませんでした。iPhoneの「設定」>「Safari」>「モーションと画面の向きへのアクセス」をONにしてください。');
         arState.manualMode = true;
       }
+    } else {
+      if (els.arSensorPrompt) els.arSensorPrompt.hidden = true;
+      arState.manualMode = false;
     }
   } catch (err) {
     console.warn('Orientation permission error:', err);
+    if (els.arSensorPrompt) els.arSensorPrompt.hidden = true;
     arState.manualMode = true;
   }
 }
@@ -1729,6 +1748,11 @@ window.openARNavigator = function(passIndex = 0) {
   els.arNavModal.hidden = false;
   document.body.style.overflow = 'hidden';
 
+  // Push history state so mobile hardware/swipe Back button returns to main page
+  if (window.location.hash !== '#iss-ar') {
+    try { history.pushState({ modal: 'iss-ar' }, '', '#iss-ar'); } catch (e) {}
+  }
+
   renderARPassTabs();
   selectARPass(passIndex);
 
@@ -1746,8 +1770,8 @@ window.openARNavigator = function(passIndex = 0) {
   loopAR();
 };
 
-window.closeARNavigator = function() {
-  if (!els.arNavModal) return;
+window.closeARNavigator = function(isFromPopState = false) {
+  if (!els.arNavModal || !arState.active) return;
   arState.active = false;
   stopARCamera();
   els.arNavModal.hidden = true;
@@ -1755,6 +1779,11 @@ window.closeARNavigator = function() {
   window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
   window.removeEventListener('deviceorientation', handleOrientation, true);
   cancelAnimationFrame(arState.animId);
+
+  // If closed by user clicking ✕ button, pop the history so state remains clean
+  if (!isFromPopState && window.location.hash === '#iss-ar') {
+    try { history.back(); } catch (e) {}
+  }
 };
 
 // Setup AR Touch / Mouse Drag for Manual Mode & Fallback
@@ -1788,8 +1817,12 @@ if (els.arViewport) {
 
 // AR UI Control Listeners
 els.openArBtn?.addEventListener('click', () => openARNavigator(0));
-els.arCloseBtn?.addEventListener('click', closeARNavigator);
-els.arSensorPermBtn?.addEventListener('click', requestARSensorPermission);
+els.arCloseBtn?.addEventListener('click', () => closeARNavigator(false));
+els.arSensorPrompt?.addEventListener('click', requestARSensorPermission);
+els.arSensorPermBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  requestARSensorPermission();
+});
 
 els.arCamBtn?.addEventListener('click', () => {
   if (arState.cameraActive) {
@@ -2388,6 +2421,12 @@ function openConstelAR(constelId) {
   arConstelState.active = true;
 
   if (els.arConstelModal) els.arConstelModal.hidden = false;
+  document.body.style.overflow = 'hidden';
+
+  // Push history state so mobile hardware/swipe Back button returns to main page
+  if (window.location.hash !== '#constel-ar') {
+    try { history.pushState({ modal: 'constel-ar' }, '', '#constel-ar'); } catch (e) {}
+  }
 
   startConstelCamera();
   initConstelOrientation();
@@ -2395,11 +2434,18 @@ function openConstelAR(constelId) {
   startConstelLoop();
 }
 
-function closeConstelAR() {
+function closeConstelAR(isFromPopState = false) {
+  if (!arConstelState.active) return;
   arConstelState.active = false;
   if (els.arConstelModal) els.arConstelModal.hidden = true;
+  document.body.style.overflow = '';
   stopConstelCamera();
   if (arConstelState.animId) cancelAnimationFrame(arConstelState.animId);
+
+  // If closed by user clicking ✕ button, pop the history so state remains clean
+  if (!isFromPopState && window.location.hash === '#constel-ar') {
+    try { history.back(); } catch (e) {}
+  }
 }
 
 async function startConstelCamera() {
@@ -2575,10 +2621,11 @@ function startConstelLoop() {
       els.arConstelGuideCard.classList.toggle('locked', isLocked);
     }
 
-    // Continuous 360° guidance arrow (Always guides user until locked)
+    // Guidance Arrow (Only shown when target constellation is outside view)
     if (els.arConstelOffscreen) {
-      els.arConstelOffscreen.style.display = !isLocked ? 'flex' : 'none';
-      if (!isLocked) {
+      const isOff = !isLocked && (Math.abs(deltaAz) > 24 || Math.abs(deltaElev) > 18);
+      els.arConstelOffscreen.style.display = isOff ? 'flex' : 'none';
+      if (isOff) {
         const rad = Math.atan2(-deltaElev, deltaAz);
         const deg = Number.isFinite((rad * 180) / Math.PI) ? (rad * 180) / Math.PI : 0;
         if (els.arConstelOffArrow) els.arConstelOffArrow.style.transform = `rotate(${deg}deg)`;
@@ -2768,7 +2815,7 @@ function initNightSkyConstellations() {
   els.constelCanvas?.addEventListener('click', () => openConstelAR());
 
   // Modal Close & Controls
-  els.arConstelCloseBtn?.addEventListener('click', closeConstelAR);
+  els.arConstelCloseBtn?.addEventListener('click', () => closeConstelAR(false));
   els.arConstelCamBtn?.addEventListener('click', () => {
     if (arConstelState.cameraActive) {
       stopConstelCamera();
@@ -2783,18 +2830,32 @@ function initNightSkyConstellations() {
   els.arConstelHelpBtn?.addEventListener('click', () => {
     if (els.arHelpModalOverlay) els.arHelpModalOverlay.hidden = false;
   });
-  els.arConstelSensorPermBtn?.addEventListener('click', async () => {
+
+  const requestConstelSensorPermission = async () => {
     try {
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         const res = await DeviceOrientationEvent.requestPermission();
         if (res === 'granted') {
           if (els.arConstelSensorPrompt) els.arConstelSensorPrompt.hidden = true;
           arConstelState.manualMode = false;
+          initConstelOrientation();
+        } else {
+          alert('センサーの利用が許可されませんでした。iPhoneの「設定」>「Safari」>「モーションと画面の向きへのアクセス」をONにしてください。');
         }
+      } else {
+        if (els.arConstelSensorPrompt) els.arConstelSensorPrompt.hidden = true;
+        arConstelState.manualMode = false;
       }
     } catch (e) {
       console.warn('Constel orientation perm error:', e);
+      if (els.arConstelSensorPrompt) els.arConstelSensorPrompt.hidden = true;
     }
+  };
+
+  els.arConstelSensorPrompt?.addEventListener('click', requestConstelSensorPermission);
+  els.arConstelSensorPermBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    requestConstelSensorPermission();
   });
 
   // Manual Drag on AR Canvas
@@ -2842,4 +2903,28 @@ setInterval(() => {
     renderConstelSkyDome();
   }
 }, 30 * 1000); // 30秒ごとに星座位置・計算時刻を更新
+
+/* ---------------- スマホの「戻る」ボタンでモーダル/ARを閉じる ---------------- */
+window.addEventListener('popstate', () => {
+  if (arState.active) {
+    closeARNavigator(true);
+    return;
+  }
+  if (arConstelState.active) {
+    closeConstelAR(true);
+    return;
+  }
+  if (els.crewModalOverlay && !els.crewModalOverlay.hidden) {
+    closeCrewModal(true);
+    return;
+  }
+  if (els.celestialModalOverlay && !els.celestialModalOverlay.hidden) {
+    closeCelestialModal(true);
+    return;
+  }
+  if (els.arHelpModalOverlay && !els.arHelpModalOverlay.hidden) {
+    els.arHelpModalOverlay.hidden = true;
+    return;
+  }
+});
 

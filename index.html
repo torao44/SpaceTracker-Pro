@@ -278,11 +278,11 @@
 
 <footer>
   <p>データ提供: Where the ISS at?, Open Notify, The Space Devs (Launch Library 2), Heavens-Above</p>
-  <p class="version-tag">Build: 2026-09-25 (v1.5.0 Today's Night Sky & AR Constellation Navigator)</p>
+  <p class="version-tag">Build: 2026-09-26 (v1.5.1 AR Navigator & Mobile Back Navigation)</p>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/satellite.js@4.1.4/dist/satellite.min.js"></script>
-<script src="app.js?v=20260925-ar2" defer></script>
+<script src="app.js?v=20260926-ar3" defer></script>
 
 <!-- ===== Crew Detail Modal ===== -->
 <div class="modal-overlay" id="crewModalOverlay" hidden>
@@ -343,7 +343,7 @@
       <div>
         <div class="ar-title-row">
           <strong>ISS 空向け ARナビ</strong>
-          <span class="badge-version">v1.4</span>
+          <span class="badge-version">v1.5.1</span>
         </div>
         <div class="ar-subtitle" id="arPassSummary">次回通過予定</div>
       </div>
@@ -372,10 +372,16 @@
       </div>
     </div>
     
-    <!-- iOS 13+ DeviceOrientation permission banner if needed -->
-    <div class="ar-sensor-prompt" id="arSensorPrompt" hidden>
-      <span>🧭 傾き・方角センサーの利用を許可してください</span>
-      <button id="arSensorPermBtn" class="btn-primary-sm">センサーを許可</button>
+    <!-- iOS 13+ / Mobile DeviceOrientation permission prompt -->
+    <div class="ar-sensor-prompt" id="arSensorPrompt" hidden style="cursor:pointer;" title="タップしてセンサーを許可">
+      <div class="ar-sensor-prompt-inner">
+        <span class="ar-sensor-icon">🧭</span>
+        <div class="ar-sensor-prompt-text">
+          <strong>【ここをタップ】センサーを許可してISSを追尾</strong>
+          <span>スマホの傾き・方角を許可すると、空に向けるだけでISSの方向へ誘導します</span>
+        </div>
+        <button id="arSensorPermBtn" class="btn-primary-sm ar-sensor-btn">許可する</button>
+      </div>
     </div>
   </div>
 
@@ -451,10 +457,16 @@
       </div>
     </div>
 
-    <!-- iOS 13+ DeviceOrientation permission prompt -->
-    <div class="ar-sensor-prompt" id="arConstelSensorPrompt" hidden style="position:absolute; top:64px; left:14px; right:14px; z-index:40; margin:0 auto; max-width:400px;">
-      <span>🧭 傾き・コンパスセンサーの利用を許可してください</span>
-      <button id="arConstelSensorPermBtn" class="btn-primary-sm">センサーを許可</button>
+    <!-- iOS 13+ / Mobile DeviceOrientation permission prompt -->
+    <div class="ar-sensor-prompt" id="arConstelSensorPrompt" hidden style="position:absolute; top:64px; left:14px; right:14px; z-index:40; margin:0 auto; max-width:440px; cursor:pointer;" title="タップしてセンサーを許可">
+      <div class="ar-sensor-prompt-inner">
+        <span class="ar-sensor-icon">🧭</span>
+        <div class="ar-sensor-prompt-text">
+          <strong>【ここをタップ】センサーを許可して星空と連動</strong>
+          <span>スマホの傾き・コンパスを許可すると、空に向けるだけで星座をリアルタイム追尾します</span>
+        </div>
+        <button id="arConstelSensorPermBtn" class="btn-primary-sm ar-sensor-btn">許可する</button>
+      </div>
     </div>
 
     <!-- Center Reticle & Lock-on Ring -->
