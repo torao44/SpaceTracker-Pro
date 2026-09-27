@@ -278,11 +278,11 @@
 
 <footer>
   <p>データ提供: Where the ISS at?, Open Notify, The Space Devs (Launch Library 2), Heavens-Above</p>
-  <p class="version-tag">Build: 2026-09-26 (v1.5.1 AR Navigator & Mobile Back Navigation)</p>
+  <p class="version-tag">Build: 2026-09-27 (v1.5.2 AR Navigator Calibration & True North Correction)</p>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/satellite.js@4.1.4/dist/satellite.min.js"></script>
-<script src="app.js?v=20260926-ar3" defer></script>
+<script src="app.js?v=20260927-v152" defer></script>
 
 <!-- ===== Crew Detail Modal ===== -->
 <div class="modal-overlay" id="crewModalOverlay" hidden>
@@ -343,18 +343,39 @@
       <div>
         <div class="ar-title-row">
           <strong>ISS 空向け ARナビ</strong>
-          <span class="badge-version">v1.5.1</span>
+          <span class="badge-version">v1.5.2</span>
         </div>
         <div class="ar-subtitle" id="arPassSummary">次回通過予定</div>
       </div>
     </div>
     <div class="ar-header-actions">
+      <button id="arCompassAdjustBtn" class="ar-btn-icon" title="方角微調整・90度回転">🧭 <span id="arCompassOffsetLabel" style="font-size:10px;font-family:monospace;">補正</span></button>
       <button id="arSoundBtn" class="ar-btn-icon" title="音声切替">🔊</button>
       <button id="arCamBtn" class="ar-btn-cam" title="カメラAR実景モード切替">📷 <span id="arCamText">AR実景</span></button>
       <button id="arHelpBtn" class="ar-btn-icon" title="ヘルプ・コンパス補正">❓</button>
       <button id="arCloseBtn" class="ar-btn-close" aria-label="閉じる">✕</button>
     </div>
   </header>
+
+  <!-- Compass Calibration Adjustment Bar (Collapsible) -->
+  <div class="ar-compass-panel" id="arCompassPanel" hidden style="position:relative; z-index:45; margin:0 12px 6px; padding:10px 14px; background:rgba(10,16,29,0.96); border:1px solid rgba(232,181,79,0.6); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.6); backdrop-filter:blur(8px);">
+    <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:6px;">
+      <strong style="color:#e8b54f; display:flex; align-items:center; gap:6px;">🧭 方角の微調整・90度回転補正</strong>
+      <span id="arCompassValText" style="font-family:monospace; font-size:11px; color:#4fd1e8; background:rgba(79,209,232,0.15); padding:2px 8px; border-radius:4px; border:1px solid rgba(79,209,232,0.3);">補正値: 0°</span>
+    </div>
+    <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+      <button id="arRotWest90" class="btn-primary-sm" style="padding:4px 8px; font-size:11px; background:#101a2c; border:1px solid #1d2942; color:#fef08a;">◀ 90° 西へ</button>
+      <button id="arRotEast90" class="btn-primary-sm" style="padding:4px 8px; font-size:11px; background:#101a2c; border:1px solid #1d2942; color:#fef08a;">90° 東へ ▶</button>
+      <button id="arAdjMinus5" class="btn-primary-sm" style="padding:4px 8px; font-size:11px; background:#101a2c; border:1px solid #1d2942; color:#8a99b3;">-5°</button>
+      <button id="arAdjPlus5" class="btn-primary-sm" style="padding:4px 8px; font-size:11px; background:#101a2c; border:1px solid #1d2942; color:#8a99b3;">+5°</button>
+      <button id="arSetNorthBtn" class="btn-primary-sm" style="padding:4px 10px; font-size:11px; background:rgba(79,209,232,0.2); border:1px solid rgba(79,209,232,0.5); color:#4fd1e8; font-weight:bold; margin-left:auto;">🧭 今の向きを北にする</button>
+      <button id="arResetOffsetBtn" class="btn-primary-sm" style="padding:4px 8px; font-size:11px; background:#101a2c; border:1px solid #1d2942; color:#8a99b3;">リセット</button>
+    </div>
+    <div style="font-size:10px; color:#8a99b3; margin-top:6px; display:flex; justify-content:space-between;">
+      <span id="arDeclinationText">📍 磁気偏角: 自動補正済</span>
+      <span style="color:#e8b54f;">💡 動きが鈍い時はスマホを空中で「8の字」に回してください</span>
+    </div>
+  </div>
 
   <!-- Real-time Navigation Guidance Banner ("もっと右", "もっと上", "ロックオン") -->
   <div class="ar-guidance-container">
@@ -450,10 +471,31 @@
         </div>
       </div>
       <div class="ar-tools">
+        <button id="arConstelCompassBtn" class="ar-tool-btn" title="方角微調整・90度回転">🧭</button>
         <button id="arConstelCamBtn" class="ar-tool-btn" title="カメラAR / 仮想星空 切り替え">📷</button>
         <button id="arConstelSoundBtn" class="ar-tool-btn" title="サウンド切替">🔔</button>
         <button id="arConstelHelpBtn" class="ar-tool-btn" title="コンパス補正・ヘルプ">❓</button>
         <button id="arConstelCloseBtn" class="ar-close-btn" title="ARナビを閉じる">✕</button>
+      </div>
+    </div>
+
+    <!-- Constellation Compass Calibration Adjustment Bar -->
+    <div class="ar-compass-panel" id="arConstelCompassPanel" hidden style="position:relative; z-index:45; margin:0 12px 6px; padding:10px 14px; background:rgba(10,16,29,0.96); border:1px solid rgba(232,181,79,0.6); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.6); backdrop-filter:blur(8px);">
+      <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:6px;">
+        <strong style="color:#e8b54f; display:flex; align-items:center; gap:6px;">🧭 方角の微調整・90度回転補正</strong>
+        <span id="arConstelCompassValText" style="font-family:monospace; font-size:11px; color:#4fd1e8; background:rgba(79,209,232,0.15); padding:2px 8px; border-radius:4px; border:1px solid rgba(79,209,232,0.3);">補正値: 0°</span>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+        <button id="arConstelRotWest90" class="btn-primary-sm" style="padding:4px 8px; font-size:11px; background:#101a2c; border:1px solid #1d2942; color:#fef08a;">◀ 90° 西へ</button>
+        <button id="arConstelRotEast90" class="btn-primary-sm" style="padding:4px 8px; font-size:11px; background:#101a2c; border:1px solid #1d2942; color:#fef08a;">90° 東へ ▶</button>
+        <button id="arConstelAdjMinus5" class="btn-primary-sm" style="padding:4px 8px; font-size:11px; background:#101a2c; border:1px solid #1d2942; color:#8a99b3;">-5°</button>
+        <button id="arConstelAdjPlus5" class="btn-primary-sm" style="padding:4px 8px; font-size:11px; background:#101a2c; border:1px solid #1d2942; color:#8a99b3;">+5°</button>
+        <button id="arConstelSetNorthBtn" class="btn-primary-sm" style="padding:4px 10px; font-size:11px; background:rgba(79,209,232,0.2); border:1px solid rgba(79,209,232,0.5); color:#4fd1e8; font-weight:bold; margin-left:auto;">🧭 今の向きを北にする</button>
+        <button id="arConstelResetOffsetBtn" class="btn-primary-sm" style="padding:4px 8px; font-size:11px; background:#101a2c; border:1px solid #1d2942; color:#8a99b3;">リセット</button>
+      </div>
+      <div style="font-size:10px; color:#8a99b3; margin-top:6px; display:flex; justify-content:space-between;">
+        <span id="arConstelDeclinationText">📍 磁気偏角: 自動補正済</span>
+        <span style="color:#e8b54f;">💡 動きが鈍い時はスマホを空中で「8の字」に回してください</span>
       </div>
     </div>
 
