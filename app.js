@@ -1630,93 +1630,31 @@ function loopAR() {
   arState.animId = requestAnimationFrame(loopAR);
 }
 
-/* センサーデータ平滑化ユーティリティ */
-function createSensorSmoother(alpha = 0.15) {
-  let smoothed = null;
-  let count = 0;
-  return function(value) {
-    if (!Number.isFinite(value)) return smoothed ?? 0;
-    if (smoothed === null) {
-      smoothed = value;
-      count = 1;
-    } else {
-      const effectiveAlpha = count < 10 ? 0.35 : alpha;
-      smoothed = effectiveAlpha * value + (1 - effectiveAlpha) * smoothed;
-      count++;
-    }
-    return smoothed;
-  };
-}
-
-const headingSmoother = createSensorSmoother(0.12);
-const pitchSmoother = createSensorSmoother(0.18);
-
-function getScreenOrientationAngle() {
-  try {
-    if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
-      return window.screen.orientation.angle;
-    }
-  } catch (e) {}
-  if (typeof window.orientation === 'number') return window.orientation;
-  return 0;
-}
-
-function computeHeadingFromEvent(e) {
-  let heading = null;
-  const screenAngle = getScreenOrientationAngle();
-
-  if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading) && e.webkitCompassHeading >= 0) {
-    heading = e.webkitCompassHeading;
-  } else if (e.absolute && typeof e.alpha === 'number' && !isNaN(e.alpha)) {
-    heading = (360 - e.alpha) % 360;
-  } else if (typeof e.alpha === 'number' && !isNaN(e.alpha)) {
-    heading = (360 - e.alpha) % 360;
-  }
-
-  if (heading === null) return null;
-  if (heading < 0) heading += 360;
-  if (screenAngle) heading = (heading + screenAngle) % 360;
-  return heading;
-}
-
-function computePitchFromEvent(e) {
-  if (typeof e.beta !== 'number' || isNaN(e.beta)) return null;
-  const beta = Math.max(-180, Math.min(180, e.beta));
-  // beta: 0=画面垂直上向き（天頂）, 90=水平, 180=垂直下向き
-  // pitch: 90=天頂, 0=水平, -90=真下
-  let pitch;
-  if (beta >= 0) {
-    pitch = 90 - beta;
-  } else {
-    pitch = 90 + beta; // beta is negative → 90 - |beta|
-  }
-  const gamma = typeof e.gamma === 'number' && !isNaN(e.gamma) ? Math.max(-90, Math.min(90, e.gamma)) : 0;
-  if (Math.abs(gamma) > 70) {
-    const factor = (Math.abs(gamma) - 70) / 20;
-    pitch = pitch * (1 - factor * 0.6);
-  }
-  return Math.max(-30, Math.min(90, pitch));
-}
-
-let hasAbsoluteOrientation = false;
-let orientationTimeoutId = null;
-
 function handleOrientation(e) {
   if (!arState.active || arState.manualMode) return;
 
-  const isAbsolute = e.type === 'deviceorientationabsolute' || e.absolute === true;
-  if (isAbsolute) {
-    hasAbsoluteOrientation = true;
-    if (orientationTimeoutId) { clearTimeout(orientationTimeoutId); orientationTimeoutId = null; }
-  } else if (hasAbsoluteOrientation) {
-    return;
+  // Heading (Azimuth)
+  let heading = 0;
+  if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
+    heading = e.webkitCompassHeading;
+  } else if (e.alpha !== null && !isNaN(e.alpha)) {
+    heading = (360 - e.alpha) % 360;
   }
 
-  const heading = computeHeadingFromEvent(e);
-  const pitch = computePitchFromEvent(e);
+  // Pitch (Elevation) - 0° = Horizon, 90° = Zenith
+  let pitch = 45;
+  if (e.beta !== null && !isNaN(e.beta)) {
+    const beta = e.beta;
+    if (beta >= 0) {
+      pitch = beta - 90;
+    } else {
+      pitch = Math.abs(beta) - 90;
+    }
+    pitch = Math.max(-30, Math.min(90, pitch));
+  }
 
-  if (heading !== null) arState.azimuth = Math.round(headingSmoother(heading));
-  if (pitch !== null) arState.pitch = Math.round(pitchSmoother(pitch));
+  if (Number.isFinite(heading)) arState.azimuth = Math.round((heading + 360) % 360);
+  if (Number.isFinite(pitch)) arState.pitch = Math.round(pitch);
 }
 
 async function requestARSensorPermission() {
@@ -1805,18 +1743,12 @@ window.selectARPass = function(idx) {
 
 window.openARNavigator = function(passIndex = 0) {
   if (!els.arNavModal) return;
-
-  // Prevent duplicate listeners
-  window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
-  window.removeEventListener('deviceorientation', handleOrientation, true);
-  hasAbsoluteOrientation = false;
-  if (orientationTimeoutId) clearTimeout(orientationTimeoutId);
-
   arState.active = true;
   arState.passIndex = passIndex;
   els.arNavModal.hidden = false;
   document.body.style.overflow = 'hidden';
 
+  // Push history state so mobile hardware/swipe Back button returns to main page
   if (window.location.hash !== '#iss-ar') {
     try { history.pushState({ modal: 'iss-ar' }, '', '#iss-ar'); } catch (e) {}
   }
@@ -1824,13 +1756,13 @@ window.openARNavigator = function(passIndex = 0) {
   renderARPassTabs();
   selectARPass(passIndex);
 
+  // Check iOS permission requirement
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     if (els.arSensorPrompt) els.arSensorPrompt.hidden = false;
   } else {
     if (els.arSensorPrompt) els.arSensorPrompt.hidden = true;
   }
 
-  orientationTimeoutId = setTimeout(() => { hasAbsoluteOrientation = false; }, 2000);
   window.addEventListener('deviceorientationabsolute', handleOrientation, true);
   window.addEventListener('deviceorientation', handleOrientation, true);
 
@@ -1846,10 +1778,9 @@ window.closeARNavigator = function(isFromPopState = false) {
   document.body.style.overflow = '';
   window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
   window.removeEventListener('deviceorientation', handleOrientation, true);
-  hasAbsoluteOrientation = false;
-  if (orientationTimeoutId) { clearTimeout(orientationTimeoutId); orientationTimeoutId = null; }
   cancelAnimationFrame(arState.animId);
 
+  // If closed by user clicking ✕ button, pop the history so state remains clean
   if (!isFromPopState && window.location.hash === '#iss-ar') {
     try { history.back(); } catch (e) {}
   }
@@ -2511,13 +2442,7 @@ function closeConstelAR(isFromPopState = false) {
   stopConstelCamera();
   if (arConstelState.animId) cancelAnimationFrame(arConstelState.animId);
 
-  if (constelOrientationHandler) {
-    window.removeEventListener('deviceorientationabsolute', constelOrientationHandler, true);
-    window.removeEventListener('deviceorientation', constelOrientationHandler, true);
-  }
-  constelHasAbsoluteOrientation = false;
-  if (constelOrientationTimeoutId) { clearTimeout(constelOrientationTimeoutId); constelOrientationTimeoutId = null; }
-
+  // If closed by user clicking ✕ button, pop the history so state remains clean
   if (!isFromPopState && window.location.hash === '#constel-ar') {
     try { history.back(); } catch (e) {}
   }
@@ -2553,12 +2478,6 @@ function stopConstelCamera() {
   if (els.arConstelVideo) els.arConstelVideo.style.display = 'none';
 }
 
-const constelHeadingSmoother = createSensorSmoother(0.12);
-const constelPitchSmoother = createSensorSmoother(0.18);
-let constelHasAbsoluteOrientation = false;
-let constelOrientationTimeoutId = null;
-let constelOrientationHandler = null;
-
 function initConstelOrientation() {
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     if (els.arConstelSensorPrompt) els.arConstelSensorPrompt.hidden = false;
@@ -2566,52 +2485,30 @@ function initConstelOrientation() {
     if (els.arConstelSensorPrompt) els.arConstelSensorPrompt.hidden = true;
   }
 
-  // Remove previous handler if exists
-  if (constelOrientationHandler) {
-    window.removeEventListener('deviceorientationabsolute', constelOrientationHandler, true);
-    window.removeEventListener('deviceorientation', constelOrientationHandler, true);
-  }
-
-  constelHasAbsoluteOrientation = false;
-  if (constelOrientationTimeoutId) clearTimeout(constelOrientationTimeoutId);
-
-  constelOrientationHandler = (e) => {
+  const onOrientation = (e) => {
     if (arConstelState.manualMode || !arConstelState.active) return;
-
-    const isAbsolute = e.type === 'deviceorientationabsolute' || e.absolute === true;
-    if (isAbsolute) {
-      constelHasAbsoluteOrientation = true;
-      if (constelOrientationTimeoutId) { clearTimeout(constelOrientationTimeoutId); constelOrientationTimeoutId = null; }
-    } else if (constelHasAbsoluteOrientation) {
-      return;
-    }
-
-    let heading = null;
-    if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading) && e.webkitCompassHeading >= 0) {
+    let heading = 0;
+    if (typeof e.webkitCompassHeading !== 'undefined') {
       heading = e.webkitCompassHeading;
-    } else if (typeof e.alpha === 'number' && !isNaN(e.alpha)) {
+    } else if (e.alpha !== null) {
       heading = (360 - e.alpha) % 360;
     }
-    if (heading !== null && heading < 0) heading += 360;
-
-    let p = null;
+    // Pitch (Elevation) - 0° = Horizon, 90° = Zenith
+    let p = 45;
     if (e.beta !== null && !isNaN(e.beta)) {
-      const beta = Math.max(-180, Math.min(180, e.beta));
+      const beta = e.beta;
       if (beta >= 0) {
-        p = 90 - beta;
+        p = beta - 90;
       } else {
-        p = 90 + beta;
+        p = Math.abs(beta) - 90;
       }
       p = Math.max(-30, Math.min(90, p));
     }
-
-    if (heading !== null) arConstelState.azimuth = Math.round(constelHeadingSmoother(heading));
-    if (p !== null) arConstelState.pitch = Math.round(constelPitchSmoother(p));
+    if (Number.isFinite(heading)) arConstelState.azimuth = Math.round((heading + 360) % 360);
+    if (Number.isFinite(p)) arConstelState.pitch = Math.round(p);
   };
-
-  constelOrientationTimeoutId = setTimeout(() => { constelHasAbsoluteOrientation = false; }, 2000);
-  window.addEventListener('deviceorientationabsolute', constelOrientationHandler, true);
-  window.addEventListener('deviceorientation', constelOrientationHandler, true);
+  window.addEventListener('deviceorientationabsolute', onOrientation, true);
+  window.addEventListener('deviceorientation', onOrientation, true);
 }
 
 function playConstelBeep() {
