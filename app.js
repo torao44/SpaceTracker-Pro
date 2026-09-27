@@ -1318,6 +1318,130 @@ function initGalaxyCanvas() {
   render();
 }
 
+
+/* ---------------- センサーデータ平滑化（指数移動平均） ---------------- */
+function createSensorSmoother(alpha = 0.15) {
+  let smoothed = null;
+  let count = 0;
+  return function(value) {
+    if (!Number.isFinite(value)) return smoothed ?? 0;
+    if (smoothed === null) {
+      smoothed = value;
+      count = 1;
+    } else {
+      // 最初の数回は素早く追従、その後は安定して平滑化
+      const effectiveAlpha = count < 10 ? 0.35 : alpha;
+      smoothed = effectiveAlpha * value + (1 - effectiveAlpha) * smoothed;
+      count++;
+    }
+    return smoothed;
+  };
+}
+
+const headingSmoother = createSensorSmoother(0.12);
+const pitchSmoother = createSensorSmoother(0.18);
+
+/* 画面の向き角度を取得 */
+function getScreenOrientationAngle() {
+  try {
+    if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
+      return window.screen.orientation.angle;
+    }
+  } catch (e) {}
+  // iOS fallback
+  if (typeof window.orientation === 'number') return window.orientation;
+  return 0;
+}
+
+/* 方位角（Heading）をイベントから正確に計算 */
+function computeHeadingFromEvent(e) {
+  let heading = null;
+  const screenAngle = getScreenOrientationAngle();
+
+  // 1) iOS Safari の磁気コンパス（最も信頼性が高い）
+  if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading) && e.webkitCompassHeading >= 0) {
+    heading = e.webkitCompassHeading;
+  }
+  // 2) deviceorientationabsolute の alpha（絶対方位・磁北基準）
+  else if (e.absolute && typeof e.alpha === 'number' && !isNaN(e.alpha)) {
+    heading = (360 - e.alpha) % 360;
+  }
+  // 3) Android Chrome など: alpha が絶対方位の場合（absoluteフラグなしでも絶対方位を返す実装がある）
+  else if (typeof e.alpha === 'number' && !isNaN(e.alpha)) {
+    heading = (360 - e.alpha) % 360;
+  }
+
+  if (heading === null) return null;
+  if (heading < 0) heading += 360;
+
+  // 画面の向き補正（ランドスケープ時のズレを修正）
+  if (screenAngle) {
+    heading = (heading + screenAngle) % 360;
+  }
+
+  return heading;
+}
+
+/* 仰角（Pitch）をイベントから正確に計算 */
+function computePitchFromEvent(e) {
+  if (typeof e.beta !== 'number' || isNaN(e.beta)) return null;
+
+  const beta = Math.max(-180, Math.min(180, e.beta));
+  const gamma = typeof e.gamma === 'number' && !isNaN(e.gamma) ? Math.max(-90, Math.min(90, e.gamma)) : 0;
+  const screenAngle = getScreenOrientationAngle();
+
+  let pitch = 0;
+
+  // 画面の向きに応じたピッチ計算
+  if (screenAngle === 90 || screenAngle === -270) {
+    // ランドスケープ（左回転）: betaとgammaを入れ替えて計算
+    pitch = 90 - Math.abs(gamma);
+  } else if (screenAngle === -90 || screenAngle === 270) {
+    // ランドスケープ（右回転）
+    pitch = 90 - Math.abs(gamma);
+  } else {
+    // ポートレート（デフォルト）
+    // beta = 90° → 水平(0°), beta = 0° → 天頂(90°), beta = 180° → 真下(-90°)
+    pitch = 90 - Math.abs(beta);
+  }
+
+  // gammaが大きく傾いている場合、betaの信頼性が下がるので補正
+  if (Math.abs(gamma) > 70) {
+    // 横に大きく傾けている時はピッチを0付近に抑制（水平とみなす）
+    const factor = (Math.abs(gamma) - 70) / 20; // 0〜1
+    pitch = pitch * (1 - factor * 0.6);
+  }
+
+  return Math.max(-30, Math.min(90, pitch));
+}
+
+/* deviceorientationabsolute を優先し、重複を防ぐフラグ */
+let hasAbsoluteOrientation = false;
+let orientationTimeoutId = null;
+
+function handleOrientationWrapper(e) {
+  if (!arState.active || arState.manualMode) return;
+
+  const isAbsolute = e.type === 'deviceorientationabsolute' || e.absolute === true;
+
+  if (isAbsolute) {
+    hasAbsoluteOrientation = true;
+    if (orientationTimeoutId) {
+      clearTimeout(orientationTimeoutId);
+      orientationTimeoutId = null;
+    }
+  } else if (hasAbsoluteOrientation) {
+    // absoluteイベントがある環境では通常のdeviceorientationを無視
+    return;
+  }
+
+  const heading = computeHeadingFromEvent(e);
+  const pitch = computePitchFromEvent(e);
+
+  if (heading !== null) arState.azimuth = Math.round(headingSmoother(heading));
+  if (pitch !== null) arState.pitch = Math.round(pitchSmoother(pitch));
+}
+
 /* ==========================================================
    ISS AR Sky Navigator Engine (v1.5.1)
    スマホを空に向けてISSの位置を探すARナビゲーション
@@ -1631,30 +1755,7 @@ function loopAR() {
 }
 
 function handleOrientation(e) {
-  if (!arState.active || arState.manualMode) return;
-
-  // Heading (Azimuth)
-  let heading = 0;
-  if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
-    heading = e.webkitCompassHeading;
-  } else if (e.alpha !== null && !isNaN(e.alpha)) {
-    heading = (360 - e.alpha) % 360;
-  }
-
-  // Pitch (Elevation) - 0° = Horizon, 90° = Zenith
-  let pitch = 45;
-  if (e.beta !== null && !isNaN(e.beta)) {
-    const beta = e.beta;
-    if (beta >= 0) {
-      pitch = beta - 90;
-    } else {
-      pitch = Math.abs(beta) - 90;
-    }
-    pitch = Math.max(-30, Math.min(90, pitch));
-  }
-
-  if (Number.isFinite(heading)) arState.azimuth = Math.round((heading + 360) % 360);
-  if (Number.isFinite(pitch)) arState.pitch = Math.round(pitch);
+  handleOrientationWrapper(e);
 }
 
 async function requestARSensorPermission() {
@@ -1763,8 +1864,12 @@ window.openARNavigator = function(passIndex = 0) {
     if (els.arSensorPrompt) els.arSensorPrompt.hidden = true;
   }
 
-  window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-  window.addEventListener('deviceorientation', handleOrientation, true);
+  hasAbsoluteOrientation = false;
+  if (orientationTimeoutId) clearTimeout(orientationTimeoutId);
+  // absoluteイベントが2秒以内に発火しなければ通常イベントも使用
+  orientationTimeoutId = setTimeout(() => { hasAbsoluteOrientation = false; }, 2000);
+  window.addEventListener('deviceorientationabsolute', handleOrientationWrapper, true);
+  window.addEventListener('deviceorientation', handleOrientationWrapper, true);
 
   cancelAnimationFrame(arState.animId);
   loopAR();
@@ -1776,8 +1881,10 @@ window.closeARNavigator = function(isFromPopState = false) {
   stopARCamera();
   els.arNavModal.hidden = true;
   document.body.style.overflow = '';
-  window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
-  window.removeEventListener('deviceorientation', handleOrientation, true);
+  window.removeEventListener('deviceorientationabsolute', handleOrientationWrapper, true);
+  window.removeEventListener('deviceorientation', handleOrientationWrapper, true);
+  hasAbsoluteOrientation = false;
+  if (orientationTimeoutId) { clearTimeout(orientationTimeoutId); orientationTimeoutId = null; }
   cancelAnimationFrame(arState.animId);
 
   // If closed by user clicking ✕ button, pop the history so state remains clean
@@ -2478,6 +2585,33 @@ function stopConstelCamera() {
   if (els.arConstelVideo) els.arConstelVideo.style.display = 'none';
 }
 
+/* 星座AR用センサーデータ平滑化 */
+const constelHeadingSmoother = createSensorSmoother(0.12);
+const constelPitchSmoother = createSensorSmoother(0.18);
+let constelHasAbsoluteOrientation = false;
+let constelOrientationTimeoutId = null;
+
+function handleConstelOrientation(e) {
+  if (arConstelState.manualMode || !arConstelState.active) return;
+
+  const isAbsolute = e.type === 'deviceorientationabsolute' || e.absolute === true;
+  if (isAbsolute) {
+    constelHasAbsoluteOrientation = true;
+    if (constelOrientationTimeoutId) {
+      clearTimeout(constelOrientationTimeoutId);
+      constelOrientationTimeoutId = null;
+    }
+  } else if (constelHasAbsoluteOrientation) {
+    return;
+  }
+
+  const heading = computeHeadingFromEvent(e);
+  const pitch = computePitchFromEvent(e);
+
+  if (heading !== null) arConstelState.azimuth = Math.round(constelHeadingSmoother(heading));
+  if (pitch !== null) arConstelState.pitch = Math.round(constelPitchSmoother(pitch));
+}
+
 function initConstelOrientation() {
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     if (els.arConstelSensorPrompt) els.arConstelSensorPrompt.hidden = false;
@@ -2485,30 +2619,12 @@ function initConstelOrientation() {
     if (els.arConstelSensorPrompt) els.arConstelSensorPrompt.hidden = true;
   }
 
-  const onOrientation = (e) => {
-    if (arConstelState.manualMode || !arConstelState.active) return;
-    let heading = 0;
-    if (typeof e.webkitCompassHeading !== 'undefined') {
-      heading = e.webkitCompassHeading;
-    } else if (e.alpha !== null) {
-      heading = (360 - e.alpha) % 360;
-    }
-    // Pitch (Elevation) - 0° = Horizon, 90° = Zenith
-    let p = 45;
-    if (e.beta !== null && !isNaN(e.beta)) {
-      const beta = e.beta;
-      if (beta >= 0) {
-        p = beta - 90;
-      } else {
-        p = Math.abs(beta) - 90;
-      }
-      p = Math.max(-30, Math.min(90, p));
-    }
-    if (Number.isFinite(heading)) arConstelState.azimuth = Math.round((heading + 360) % 360);
-    if (Number.isFinite(p)) arConstelState.pitch = Math.round(p);
-  };
-  window.addEventListener('deviceorientationabsolute', onOrientation, true);
-  window.addEventListener('deviceorientation', onOrientation, true);
+  constelHasAbsoluteOrientation = false;
+  if (constelOrientationTimeoutId) clearTimeout(constelOrientationTimeoutId);
+  constelOrientationTimeoutId = setTimeout(() => { constelHasAbsoluteOrientation = false; }, 2000);
+
+  window.addEventListener('deviceorientationabsolute', handleConstelOrientation, true);
+  window.addEventListener('deviceorientation', handleConstelOrientation, true);
 }
 
 function playConstelBeep() {
