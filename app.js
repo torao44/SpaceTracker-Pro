@@ -1401,13 +1401,14 @@ function getARTargetCoords() {
     return Math.round((pass.startAz + diff * 0.5 + 360) % 360);
   })();
 
-  // リアルタイム通過中の追尾判定
+  // リアルタイム通過中の追尾判定（通過時刻中は自動的にLIVE追尾）
   const now = new Date();
-  const startTime = pass.startTime instanceof Date ? pass.startTime : null;
-  const endTime = pass.endTime instanceof Date ? pass.endTime : null;
-  const maxTime = pass.maxTime instanceof Date ? pass.maxTime : null;
+  const startTime = pass.startTime instanceof Date ? pass.startTime : (pass.startTime ? new Date(pass.startTime) : null);
+  const endTime = pass.endTime instanceof Date ? pass.endTime : (pass.endTime ? new Date(pass.endTime) : null);
+  const maxTime = pass.maxTime instanceof Date ? pass.maxTime : (pass.maxTime ? new Date(pass.maxTime) : null);
+  const isCurrentlyPassing = startTime && endTime && now >= startTime && now <= endTime;
 
-  if (arState.phase === 'live' && startTime && endTime && now >= startTime && now <= endTime) {
+  if ((isCurrentlyPassing || arState.phase === 'live') && startTime && endTime) {
     const nowMs = now.getTime();
     const startMs = startTime.getTime();
     const endMs = endTime.getTime();
@@ -1533,12 +1534,15 @@ function updateARGuidance() {
     }
   }
 
-  // Perspective Projection FOV (tan projection for real camera matching)
+  // Perspective Projection FOV (adapts dynamically to landscape vs portrait)
+  const isLandscape = typeof window !== 'undefined' && window.innerWidth > window.innerHeight;
+  const fovH = isLandscape ? 66 : 54;
+  const fovV = isLandscape ? 44 : 64;
+  const halfFovH = ((fovH / 2) * Math.PI) / 180;
+  const halfFovV = ((fovV / 2) * Math.PI) / 180;
   const radAz = (deltaAz * Math.PI) / 180;
   const radElev = (deltaElev * Math.PI) / 180;
-  const halfFovH = (28 * Math.PI) / 180;
-  const halfFovV = (24 * Math.PI) / 180;
-  const inFov = Math.abs(deltaAz) <= 28 && Math.abs(deltaElev) <= 24;
+  const inFov = Math.abs(deltaAz) <= fovH / 2 && Math.abs(deltaElev) <= fovV / 2;
 
   if (inFov) {
     if (els.arTargetMarker) {
@@ -1577,50 +1581,71 @@ function updateARGuidance() {
   }
 }
 
+// Canvasサイズキャッシュ（毎フレーム代入によるリフローとFPS低下を防止）
+let arCanvasW = 0;
+let arCanvasH = 0;
+function resizeARCanvas() {
+  const canvas = els.arCanvas;
+  if (!canvas) return;
+  const w = canvas.parentElement?.clientWidth || window.innerWidth;
+  const h = canvas.parentElement?.clientHeight || window.innerHeight;
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+  arCanvasW = w;
+  arCanvasH = h;
+}
+window.addEventListener('resize', resizeARCanvas);
+
 function renderARCanvas() {
-  if (!arState.active || arState.cameraActive) return;
+  if (!arState.active) return;
   const canvas = els.arCanvas;
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
-  const w = (canvas.width = canvas.parentElement?.clientWidth || window.innerWidth);
-  const h = (canvas.height = canvas.parentElement?.clientHeight || window.innerHeight);
+  const w = arCanvasW || canvas.width || window.innerWidth;
+  const h = arCanvasH || canvas.height || window.innerHeight;
 
-  // Background Sky Gradient based on pitch
+  ctx.clearRect(0, 0, w, h);
+
+  // Background Sky Gradient & Stars (カメラ起動時は実景の上にオーバーレイするためスキップ)
   const horizonY = h / 2 + (arState.pitch / 90) * (h * 0.6);
-  const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, '#040711');
-  grad.addColorStop(0.65, '#0b162a');
-  grad.addColorStop(1, '#142542');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, h);
+  if (!arState.cameraActive) {
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#040711');
+    grad.addColorStop(0.65, '#0b162a');
+    grad.addColorStop(1, '#142542');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
 
-  // Stars
-  ctx.save();
-  for (let i = 0; i < 50; i++) {
-    const starAz = (i * 37) % 360;
-    const starElev = (i * 23) % 85 + 5;
-    const sDeltaAz = ((starAz - arState.azimuth + 540) % 360) - 180;
-    const sDeltaElev = starElev - arState.pitch;
+    // Stars
+    ctx.save();
+    for (let i = 0; i < 50; i++) {
+      const starAz = (i * 37) % 360;
+      const starElev = (i * 23) % 85 + 5;
+      const sDeltaAz = ((starAz - arState.azimuth + 540) % 360) - 180;
+      const sDeltaElev = starElev - arState.pitch;
 
-    if (Math.abs(sDeltaAz) < 50 && Math.abs(sDeltaElev) < 40) {
-      const sx = w / 2 + (sDeltaAz / 50) * (w / 2);
-      const sy = h / 2 - (sDeltaElev / 40) * (h / 2);
-      ctx.beginPath();
-      ctx.arc(sx, sy, (i % 3 === 0 ? 2 : 1.2), 0, Math.PI * 2);
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.85)' : 'rgba(180, 220, 255, 0.7)';
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = '#fff';
-      ctx.fill();
+      if (Math.abs(sDeltaAz) < 50 && Math.abs(sDeltaElev) < 40) {
+        const sx = w / 2 + (sDeltaAz / 50) * (w / 2);
+        const sy = h / 2 - (sDeltaElev / 40) * (h / 2);
+        ctx.beginPath();
+        ctx.arc(sx, sy, (i % 3 === 0 ? 2 : 1.2), 0, Math.PI * 2);
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.85)' : 'rgba(180, 220, 255, 0.7)';
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = '#fff';
+        ctx.fill();
+      }
     }
+    ctx.restore();
   }
-  ctx.restore();
 
-  // Horizon Line
+  // Horizon Line (実景カメラ時も緑のAR水平線ガイドとしてくっきり重ねて描画)
   if (horizonY > 0 && horizonY < h) {
-    ctx.strokeStyle = 'rgba(78, 224, 138, 0.4)';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = arState.cameraActive ? 'rgba(78, 224, 138, 0.85)' : 'rgba(78, 224, 138, 0.4)';
+    ctx.lineWidth = arState.cameraActive ? 2 : 1.5;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.moveTo(0, horizonY);
@@ -1628,19 +1653,21 @@ function renderARCanvas() {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Ground shading
-    const groundGrad = ctx.createLinearGradient(0, horizonY, 0, h);
-    groundGrad.addColorStop(0, 'rgba(5, 10, 18, 0.5)');
-    groundGrad.addColorStop(1, 'rgba(2, 5, 10, 0.95)');
-    ctx.fillStyle = groundGrad;
-    ctx.fillRect(0, horizonY, w, h - horizonY);
+    if (!arState.cameraActive) {
+      // Ground shading
+      const groundGrad = ctx.createLinearGradient(0, horizonY, 0, h);
+      groundGrad.addColorStop(0, 'rgba(5, 10, 18, 0.5)');
+      groundGrad.addColorStop(1, 'rgba(2, 5, 10, 0.95)');
+      ctx.fillStyle = groundGrad;
+      ctx.fillRect(0, horizonY, w, h - horizonY);
+    }
 
-    ctx.fillStyle = 'rgba(78, 224, 138, 0.7)';
+    ctx.fillStyle = arState.cameraActive ? '#4ee08a' : 'rgba(78, 224, 138, 0.7)';
     ctx.font = '10px monospace';
     ctx.fillText('地平線 (0°)', 12, horizonY - 6);
   }
 
-  // Compass Cardinal Directions on Horizon
+  // Compass Cardinal Directions on Horizon (実景カメラ時も方位HUDとして描画)
   const cardinals = [
     { deg: 0, label: '北 (N)' },
     { deg: 45, label: '北東 (NE)' },
@@ -1657,7 +1684,7 @@ function renderARCanvas() {
     if (Math.abs(cDeltaAz) < 50) {
       const cx = w / 2 + (cDeltaAz / 50) * (w / 2);
       const cy = horizonY > 0 && horizonY < h ? horizonY : h - 30;
-      ctx.fillStyle = deg % 90 === 0 ? '#4fd1e8' : 'rgba(238, 242, 248, 0.6)';
+      ctx.fillStyle = deg % 90 === 0 ? '#4fd1e8' : 'rgba(238, 242, 248, 0.85)';
       ctx.font = deg % 90 === 0 ? 'bold 12px sans-serif' : '10px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(label, cx, cy + 18);
@@ -1670,12 +1697,14 @@ function renderARCanvas() {
     }
   });
 
-  // Pass Orbit Arc
+  // Pass Orbit Arc (実景カメラの上にも黄金の通過軌道線を鮮明にAR重畳描画)
   const pass = currentVisiblePasses[arState.passIndex];
   if (pass) {
     ctx.save();
-    ctx.strokeStyle = 'rgba(232, 181, 79, 0.4)';
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = arState.cameraActive ? 'rgba(232, 181, 79, 0.95)' : 'rgba(232, 181, 79, 0.45)';
+    ctx.lineWidth = arState.cameraActive ? 3.5 : 2.5;
+    ctx.shadowColor = '#e8b54f';
+    ctx.shadowBlur = arState.cameraActive ? 12 : 4;
     ctx.setLineDash([6, 6]);
     ctx.beginPath();
 
@@ -1704,8 +1733,38 @@ function renderARCanvas() {
   }
 }
 
+// リアルタイム通過判定（通過中は自動的に 🔴 LIVE追尾モード に移行）
+let lastLiveCheck = 0;
+function checkARLivePassStatus() {
+  if (!arState.active) return;
+  const now = Date.now();
+  if (now - lastLiveCheck < 1000) return;
+  lastLiveCheck = now;
+
+  const pass = currentVisiblePasses[arState.passIndex];
+  if (!pass) return;
+
+  const nowDate = new Date();
+  const startTime = pass.startTime instanceof Date ? pass.startTime : (pass.startTime ? new Date(pass.startTime) : null);
+  const endTime = pass.endTime instanceof Date ? pass.endTime : (pass.endTime ? new Date(pass.endTime) : null);
+  const isPassing = Boolean(startTime && endTime && nowDate >= startTime && nowDate <= endTime);
+
+  if (isPassing) {
+    if (arState.phase !== 'live') {
+      arState.phase = 'live';
+      document.querySelectorAll('.ar-phase-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.phase === 'live');
+      });
+    }
+    if (els.arPassSummary) {
+      els.arPassSummary.innerHTML = `<span style="color:#ef4444;font-weight:bold;">🔴 LIVE リアルタイム通過中！</span> ${pass.dateStr} (最大仰角 ${pass.maxElev}°)`;
+    }
+  }
+}
+
 function loopAR() {
   if (!arState.active) return;
+  checkARLivePassStatus();
   updateARGuidance();
   renderARCanvas();
   arState.animId = requestAnimationFrame(loopAR);
@@ -1728,6 +1787,8 @@ try {
   if (savedOffset) compassOffset = Number(savedOffset) || 0;
 } catch (e) {}
 
+let lastStableHeading = null;
+
 function updateGlobalCompassOffset(deltaOrValue, isAbsolute = false) {
   if (isAbsolute) {
     compassOffset = deltaOrValue;
@@ -1747,19 +1808,49 @@ function computeDeviceAngles(e) {
   const lon = userLocation ? userLocation.lon : 139.69;
   const declination = getMagneticDeclination(lat, lon);
 
+  // 画面の回転角（縦持ち: 0°、横持ち左: 90°、横持ち右: 270°）
+  let screenAngle = 0;
+  if (typeof window !== 'undefined') {
+    if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
+      screenAngle = window.screen.orientation.angle;
+    } else if (typeof window.orientation === 'number') {
+      screenAngle = window.orientation || 0;
+    }
+  }
+
   // 1. iOS: webkitCompassHeading が存在する場合（地磁気による絶対方位角 0〜360）
   if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading) && e.webkitCompassHeading >= 0) {
-    const trueHeading = (e.webkitCompassHeading + declination + compassOffset + 720) % 360;
+    let heading = (e.webkitCompassHeading + screenAngle + declination + compassOffset + 720) % 360;
     let pitch = 0;
     if (typeof e.beta === 'number' && !isNaN(e.beta)) {
       const b = e.beta;
       const g = (typeof e.gamma === 'number' && !isNaN(e.gamma)) ? e.gamma : 0;
       // iOS縦持ち時: 垂直でbeta=90° -> 仰角0° (地平線)。空へ向けるとbetaが0°へ減少 -> 仰角+90° (天頂)。
       const rollRad = (g * Math.PI) / 180;
-      pitch = 90 - (b * Math.cos(rollRad));
-      pitch = Math.max(-30, Math.min(90, pitch));
+      let p = 90 - (b * Math.cos(rollRad));
+      if (Math.abs(screenAngle) === 90 || Math.abs(screenAngle) === 270) {
+        const pitchSign = screenAngle === 90 ? 1 : -1;
+        p = Math.abs(g) <= 90 ? Math.asin(Math.max(-1, Math.min(1, Math.cos(b * (Math.PI / 180)) * Math.sin(rollRad) * pitchSign))) * (180 / Math.PI) : p;
+      }
+      pitch = Math.max(-30, Math.min(90, p));
     }
-    return { heading: trueHeading, pitch };
+
+    // 天頂付近（仰角 80°〜90°）でのジンバルロック・ジッター対策
+    if (pitch >= 80) {
+      if (lastStableHeading !== null) {
+        if (pitch >= 85) {
+          heading = lastStableHeading;
+        } else {
+          const blend = (pitch - 80) / 5;
+          const diff = ((heading - lastStableHeading + 540) % 360) - 180;
+          heading = (lastStableHeading + diff * (1 - blend * 0.85) + 360) % 360;
+        }
+      }
+    } else {
+      lastStableHeading = heading;
+    }
+
+    return { heading, pitch };
   }
 
   // 2. Android / W3C 標準: 端末オイラー角 (alpha, beta, gamma) を3次元ベクトル変換
@@ -1788,21 +1879,44 @@ function computeDeviceAngles(e) {
     let rawHeading = Math.atan2(Vx, Vy) * (180 / Math.PI);
     const isAbs = e.type === 'deviceorientationabsolute' || isAbsoluteActive;
     const decl = isAbs ? 0 : declination;
-    const trueHeading = (rawHeading + decl + compassOffset + 720) % 360;
+    // 横持ち画面回転角（screenAngle）および磁気偏角・ユーザー補正を合成
+    let heading = (rawHeading + screenAngle + decl + compassOffset + 720) % 360;
 
     // 仰角（水平0°、天頂90°）
     const hDist = Math.sqrt(Vx * Vx + Vy * Vy);
     let pitch = Math.atan2(Vz, Math.max(0.001, hDist)) * (180 / Math.PI);
+    if (Math.abs(screenAngle) === 90 || Math.abs(screenAngle) === 270) {
+      const pitchSign = screenAngle === 90 ? 1 : -1;
+      const bRad = (e.beta * Math.PI) / 180;
+      const gRad = (e.gamma * Math.PI) / 180;
+      const landP = Math.abs(e.beta) <= 90 ? Math.asin(Math.max(-1, Math.min(1, Math.cos(gRad) * Math.sin(bRad) * pitchSign))) * (180 / Math.PI) : pitch;
+      pitch = landP;
+    }
     pitch = Math.max(-30, Math.min(90, pitch));
 
-    return { heading: trueHeading, pitch };
+    // 天頂付近（仰角 80°〜90°）でのジンバルロック・ジッター対策
+    if (pitch >= 80) {
+      if (lastStableHeading !== null) {
+        if (pitch >= 85) {
+          heading = lastStableHeading;
+        } else {
+          const blend = (pitch - 80) / 5;
+          const diff = ((heading - lastStableHeading + 540) % 360) - 180;
+          heading = (lastStableHeading + diff * (1 - blend * 0.85) + 360) % 360;
+        }
+      }
+    } else {
+      lastStableHeading = heading;
+    }
+
+    return { heading, pitch };
   }
 
   return null;
 }
 
 // 適応型スムージング（手ブレ・微小振動を吸収しつつ、素早い振り向きには遅延なく即座に追従）
-function smoothOrientation(current, target, isHeading = false) {
+function smoothOrientation(current, target, isHeading = false, currentPitch = 0) {
   if (current === null || isNaN(current) || typeof current === 'undefined') return target;
 
   let diff = target - current;
@@ -1812,9 +1926,11 @@ function smoothOrientation(current, target, isHeading = false) {
 
   const absDiff = Math.abs(diff);
 
-  // 動きに応じたダイナミック重み（微動時は手ブレ吸収、大きな動きは即座に吸い付く）
+  // 動きに応じたダイナミック重み（仰角80°以上の天頂付近では、微小な揺れによる激しい回転を防ぐため重みを小さく抑制）
   let factor = 0.35;
-  if (absDiff > 12) {
+  if (isHeading && currentPitch >= 80) {
+    factor = 0.12; // 天頂付近のジンバルロック・方位ジッター保護
+  } else if (absDiff > 12) {
     factor = 0.95; // 急な振り向き：瞬時追従
   } else if (absDiff > 4) {
     factor = 0.70; // 通常の探索：滑らかかつ高速
@@ -1846,8 +1962,8 @@ function handleOrientation(e) {
   const angles = computeDeviceAngles(e);
   if (!angles) return;
 
-  arState.azimuth = smoothOrientation(arState.azimuth, angles.heading, true);
-  arState.pitch = smoothOrientation(arState.pitch, angles.pitch, false);
+  arState.azimuth = smoothOrientation(arState.azimuth, angles.heading, true, angles.pitch);
+  arState.pitch = smoothOrientation(arState.pitch, angles.pitch, false, angles.pitch);
 }
 
 async function requestARSensorPermission() {
@@ -1893,7 +2009,7 @@ async function startARCamera() {
     arState.cameraActive = true;
     if (els.arCamBtn) els.arCamBtn.classList.add('active');
     if (els.arCamText) els.arCamText.textContent = '夜空HUD';
-    if (els.arCanvas) els.arCanvas.style.opacity = '0.35'; // Keep HUD overlay visible over camera
+    if (els.arCanvas) els.arCanvas.style.opacity = '1'; // Transparent canvas overlay on top of camera
   } catch (err) {
     console.warn('Camera failed:', err);
     alert('カメラの起動に失敗しました（夜空HUDモードで動作します）');
@@ -1929,6 +2045,17 @@ window.selectARPass = function(idx) {
   arState.passIndex = idx;
   renderARPassTabs();
   const pass = currentVisiblePasses[idx];
+  if (pass) {
+    const now = new Date();
+    const st = pass.startTime instanceof Date ? pass.startTime : (pass.startTime ? new Date(pass.startTime) : null);
+    const et = pass.endTime instanceof Date ? pass.endTime : (pass.endTime ? new Date(pass.endTime) : null);
+    if (st && et && now >= st && now <= et) {
+      arState.phase = 'live';
+      document.querySelectorAll('.ar-phase-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.phase === 'live');
+      });
+    }
+  }
   if (els.arPassSummary && pass) {
     els.arPassSummary.textContent = `${pass.dateStr} 最大仰角 ${pass.maxElev}° (${pass.qualityLabel})`;
   }
@@ -1947,6 +2074,7 @@ window.openARNavigator = function(passIndex = 0) {
   }
 
   updateCompassUI();
+  resizeARCanvas();
   renderARPassTabs();
   selectARPass(passIndex);
 
@@ -2672,6 +2800,7 @@ function openConstelAR(constelId) {
   }
 
   updateCompassUI();
+  resizeConstelCanvas();
   startConstelCamera();
   initConstelOrientation();
   renderConstelCarousel();
@@ -2743,8 +2872,8 @@ function initConstelOrientation() {
     const angles = computeDeviceAngles(e);
     if (!angles) return;
 
-    arConstelState.azimuth = smoothOrientation(arConstelState.azimuth, angles.heading, true);
-    arConstelState.pitch = smoothOrientation(arConstelState.pitch, angles.pitch, false);
+    arConstelState.azimuth = smoothOrientation(arConstelState.azimuth, angles.heading, true, angles.pitch);
+    arConstelState.pitch = smoothOrientation(arConstelState.pitch, angles.pitch, false, angles.pitch);
   };
 
   window.addEventListener('deviceorientationabsolute', onOrientation, true);
@@ -2794,6 +2923,23 @@ function renderConstelCarousel() {
   });
 }
 
+// 星座AR Canvasサイズキャッシュ（毎フレーム代入によるリフローとFPS低下を防止）
+let constelCanvasW = 0;
+let constelCanvasH = 0;
+function resizeConstelCanvas() {
+  const canvas = els.arConstelCanvas;
+  if (!canvas) return;
+  const w = canvas.clientWidth || window.innerWidth;
+  const h = canvas.clientHeight || window.innerHeight;
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+  constelCanvasW = w;
+  constelCanvasH = h;
+}
+window.addEventListener('resize', resizeConstelCanvas);
+
 function startConstelLoop() {
   const canvas = els.arConstelCanvas;
   if (!canvas) return;
@@ -2802,8 +2948,8 @@ function startConstelLoop() {
 
   const loop = () => {
     if (!arConstelState.active) return;
-    const w = canvas.width = canvas.clientWidth;
-    const h = canvas.height = canvas.clientHeight;
+    const w = constelCanvasW || canvas.width || window.innerWidth;
+    const h = constelCanvasH || canvas.height || window.innerHeight;
     ctx.clearRect(0, 0, w, h);
 
     // If camera is OFF, render starry background & horizon
@@ -2834,8 +2980,9 @@ function startConstelLoop() {
       }
     }
 
-    const fovX = 65;
-    const fovY = 50;
+    const isLandscape = w > h;
+    const fovX = isLandscape ? 72 : 55;
+    const fovY = isLandscape ? 45 : 65;
     const list = computeAllConstellations();
     const target = list.find(c => c.id === arConstelState.targetId) || list[0];
 

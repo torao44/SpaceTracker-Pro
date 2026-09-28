@@ -1124,16 +1124,22 @@ footer{
   cursor:grabbing;
 }
 .ar-video{
+  position:absolute;
+  inset:0;
   width:100%;
   height:100%;
   object-fit:cover;
   pointer-events:none;
+  z-index:1;
 }
 .ar-canvas{
+  position:absolute;
+  inset:0;
   width:100%;
   height:100%;
   display:block;
   pointer-events:none;
+  z-index:2;
 }
 
 /* Center Crosshair */
@@ -1625,6 +1631,21 @@ footer{
   background:var(--gold);
   color:#070b14;
   font-weight:700;
+}
+.ar-phase-btn[data-phase="live"] {
+  color: #ef4444;
+  font-weight: 700;
+}
+.ar-phase-btn[data-phase="live"].active {
+  background: #ef4444;
+  color: #ffffff;
+  font-weight: 800;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.7);
+  animation: liveBtnPulse 1.4s infinite ease-in-out;
+}
+@keyframes liveBtnPulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(239, 68, 68, 0.5); transform: scale(1); }
+  50% { box-shadow: 0 0 14px rgba(239, 68, 68, 0.95); transform: scale(1.04); }
 }
 .ar-mode-controls{
   display:flex;

@@ -278,11 +278,11 @@
 
 <footer>
   <p>データ提供: Where the ISS at?, Open Notify, The Space Devs (Launch Library 2), Heavens-Above</p>
-  <p class="version-tag">Build: 2026-09-27 (v1.5.2 AR Navigator Calibration & True North Correction)</p>
+  <p class="version-tag">Build: 2026-09-28 (v1.5.3 AR Real-Camera HUD, Landscape & LIVE Tracking)</p>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/satellite.js@4.1.4/dist/satellite.min.js"></script>
-<script src="app.js?v=20260927-v152" defer></script>
+<script src="app.js?v=20260928-v153" defer></script>
 
 <!-- ===== Crew Detail Modal ===== -->
 <div class="modal-overlay" id="crewModalOverlay" hidden>
@@ -416,6 +416,7 @@
       <div class="ar-phase-selector">
         <span class="ar-phase-label">目標点:</span>
         <div class="ar-phase-group">
+          <button class="ar-phase-btn" data-phase="live" id="arPhaseLiveBtn">🔴 LIVE</button>
           <button class="ar-phase-btn" data-phase="start">出現点 (10°)</button>
           <button class="ar-phase-btn active" data-phase="peak">最大仰角 (ピーク)</button>
           <button class="ar-phase-btn" data-phase="end">消滅点 (10°)</button>
