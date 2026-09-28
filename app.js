@@ -1342,7 +1342,7 @@ function initGalaxyCanvas() {
 }
 
 /* ==========================================================
-   ISS AR Sky Navigator Engine (v1.6.0)
+   ISS AR Sky Navigator Engine (v1.6.1)
    スマホを空に向けてISSの位置を探すARナビゲーション
    ========================================================== */
 const arState = {
@@ -1803,6 +1803,58 @@ function getScreenOrientationAngle() {
   return 0;
 }
 
+// 地磁気センサー非搭載タブレット（TB331FC等）向けジャイロスコープ相対トラッキング状態
+let lastMotionTimestamp = 0;
+let relativeAzimuth = 180; // 地磁気なし時の相対方位角（初期値180°）
+let hasValidGeomagneticHeading = false; // 地磁気コンパスが有効かどうかの判定フラグ
+
+// ジャイロスコープ角速度（DeviceMotionEvent.rotationRate）のリアルタイム積分
+function handleDeviceMotion(e) {
+  if ((!arState.active && !arConstelState.active) || (arState.manualMode && arConstelState.manualMode)) return;
+  const now = performance.now();
+  if (!lastMotionTimestamp) {
+    lastMotionTimestamp = now;
+    return;
+  }
+  const dt = Math.min(0.1, (now - lastMotionTimestamp) / 1000); // 経過秒数
+  lastMotionTimestamp = now;
+
+  // 地磁気による絶対方位が得られない端末の場合、ジャイロ角速度で旋回をトラッキング
+  if (!hasValidGeomagneticHeading && e.rotationRate) {
+    const screenAngle = getScreenOrientationAngle();
+    const radS = (screenAngle * Math.PI) / 180;
+
+    const rAlpha = e.rotationRate.alpha || 0; // Z軸周り（画面垂直）
+    const rBeta = e.rotationRate.beta || 0;   // X軸周り
+    const rGamma = e.rotationRate.gamma || 0; // Y軸周り
+
+    // 画面の横持ち回転角（Landscape）を反映した実効角速度
+    const effRBeta = rBeta * Math.cos(radS) + rGamma * Math.sin(radS);
+    const effRGamma = -rBeta * Math.sin(radS) + rGamma * Math.cos(radS);
+
+    // 端末の現在の仰角（Pitch）に応じた鉛直軸（水平旋回）周りの角速度を算出
+    const currentP = arState.active ? arState.pitch : (arConstelState.active ? arConstelState.pitch : 45);
+    const pitchRad = (Math.max(-20, Math.min(90, currentP)) * Math.PI) / 180;
+    const cosP = Math.cos(pitchRad);
+    const sinP = Math.sin(pitchRad);
+
+    // 水平面まわりの旋回速度（deg/sec）
+    const yawRate = -(effRGamma * cosP + rAlpha * sinP);
+
+    // 微小振動ノイズ除去（0.30 deg/s 以下は無視）
+    if (Math.abs(yawRate) > 0.30) {
+      relativeAzimuth = (relativeAzimuth + yawRate * dt + 360) % 360;
+      const targetAz = (relativeAzimuth + compassOffset + 360) % 360;
+      if (arState.active && !arState.manualMode) {
+        arState.azimuth = smoothOrientation(arState.azimuth, targetAz, true, arState.pitch);
+      }
+      if (arConstelState.active && !arConstelState.manualMode) {
+        arConstelState.azimuth = smoothOrientation(arConstelState.azimuth, targetAz, true, arConstelState.pitch);
+      }
+    }
+  }
+}
+
 // 3次元回転変換から、背面カメラが向いている「真の方位角（Heading）」と「仰角（Pitch）」を精密計算
 function computeDeviceAngles(e) {
   const lat = userLocation ? userLocation.lat : 35.68;
@@ -1812,13 +1864,12 @@ function computeDeviceAngles(e) {
 
   // 1. iOS: webkitCompassHeading が存在する場合（地磁気による絶対方位角 0〜360）
   if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading) && e.webkitCompassHeading >= 0) {
-    // 画面の横持ち回転角（screenAngle）を加味して真の方位角を計算
+    hasValidGeomagneticHeading = true;
     const trueHeading = (e.webkitCompassHeading + screenAngle + declination + compassOffset + 720) % 360;
     let pitch = 0;
     if (typeof e.beta === 'number' && !isNaN(e.beta)) {
       const g = (typeof e.gamma === 'number' && !isNaN(e.gamma)) ? e.gamma : 0;
       const radS = (screenAngle * Math.PI) / 180;
-      // 画面回転角に応じて beta と gamma を合成した実効傾斜角を計算
       const effBeta = e.beta * Math.cos(radS) + g * Math.sin(radS);
       const effGamma = -e.beta * Math.sin(radS) + g * Math.cos(radS);
       const rollRad = (effGamma * Math.PI) / 180;
@@ -1828,9 +1879,10 @@ function computeDeviceAngles(e) {
     return { heading: trueHeading, pitch };
   }
 
-  // 2. Android / W3C 標準: 端末オイラー角 (alpha, beta, gamma) を3次元ベクトル変換
-  if (e.alpha !== null && e.beta !== null && e.gamma !== null &&
-      !isNaN(e.alpha) && !isNaN(e.beta) && !isNaN(e.gamma)) {
+  // 2. Android / W3C 標準: 端末オイラー角 (alpha, beta, gamma) が完全にある場合
+  if (e.alpha !== null && typeof e.alpha === 'number' && !isNaN(e.alpha) &&
+      e.beta !== null && e.gamma !== null && !isNaN(e.beta) && !isNaN(e.gamma)) {
+    hasValidGeomagneticHeading = true;
     const degToRad = Math.PI / 180;
     const a = e.alpha * degToRad; // Z axis (screen normal)
     const b = e.beta * degToRad;  // X axis (horizontal)
@@ -1866,6 +1918,22 @@ function computeDeviceAngles(e) {
     pitch = Math.max(-30, Math.min(90, pitch));
 
     return { heading: trueHeading, pitch };
+  }
+
+  // 3. 地磁気センサー非搭載端末（TB331FC等、alphaが欠損または機能しない場合）の加速度+ジャイロフォールバック
+  if (typeof e.beta === 'number' && !isNaN(e.beta)) {
+    hasValidGeomagneticHeading = false;
+    const g = (typeof e.gamma === 'number' && !isNaN(e.gamma)) ? e.gamma : 0;
+    const radS = (screenAngle * Math.PI) / 180;
+    const effBeta = e.beta * Math.cos(radS) + g * Math.sin(radS);
+    const effGamma = -e.beta * Math.sin(radS) + g * Math.cos(radS);
+    const rollRad = (effGamma * Math.PI) / 180;
+    let pitch = 90 - (effBeta * Math.cos(rollRad));
+    pitch = Math.max(-30, Math.min(90, pitch));
+
+    // 方位はジャイロ積分値を使用
+    const heading = (relativeAzimuth + compassOffset + 360) % 360;
+    return { heading, pitch };
   }
 
   return null;
@@ -2045,6 +2113,7 @@ window.openARNavigator = function(passIndex = 0) {
     if (els.arSensorPrompt) els.arSensorPrompt.hidden = true;
   }
 
+  window.addEventListener('devicemotion', handleDeviceMotion, true);
   window.addEventListener('deviceorientationabsolute', handleOrientation, true);
   window.addEventListener('deviceorientation', handleOrientation, true);
 
@@ -2058,6 +2127,7 @@ window.closeARNavigator = function(isFromPopState = false) {
   stopARCamera();
   els.arNavModal.hidden = true;
   document.body.style.overflow = '';
+  window.removeEventListener('devicemotion', handleDeviceMotion, true);
   window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
   window.removeEventListener('deviceorientation', handleOrientation, true);
   cancelAnimationFrame(arState.animId);
@@ -2763,6 +2833,7 @@ function openConstelAR(constelId) {
   updateCompassUI();
   startConstelCamera();
   initConstelOrientation();
+  window.addEventListener('devicemotion', handleDeviceMotion, true);
   renderConstelCarousel();
   startConstelLoop();
 }
@@ -2773,6 +2844,11 @@ function closeConstelAR(isFromPopState = false) {
   if (els.arConstelModal) els.arConstelModal.hidden = true;
   document.body.style.overflow = '';
   stopConstelCamera();
+  window.removeEventListener('devicemotion', handleDeviceMotion, true);
+  if (arConstelState.onOrientationListener) {
+    window.removeEventListener('deviceorientationabsolute', arConstelState.onOrientationListener, true);
+    window.removeEventListener('deviceorientation', arConstelState.onOrientationListener, true);
+  }
   if (arConstelState.animId) cancelAnimationFrame(arConstelState.animId);
 
   // If closed by user clicking ✕ button, pop the history so state remains clean
@@ -2836,6 +2912,7 @@ function initConstelOrientation() {
     arConstelState.pitch = smoothOrientation(arConstelState.pitch, angles.pitch, false, arConstelState.pitch);
   };
 
+  arConstelState.onOrientationListener = onOrientation;
   window.addEventListener('deviceorientationabsolute', onOrientation, true);
   window.addEventListener('deviceorientation', onOrientation, true);
 }

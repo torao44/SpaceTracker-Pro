@@ -1,6 +1,6 @@
-# 🛰️ SpaceTracker Pro (v1.6.0)
+# 🛰️ SpaceTracker Pro (v1.6.1)
 
-[![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)](https://github.com/torao44/SpaceTracker-Pro)
+[![Version](https://img.shields.io/badge/version-1.6.1-blue.svg)](https://github.com/torao44/SpaceTracker-Pro)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PWA Ready](https://img.shields.io/badge/PWA-Ready-green.svg)](https://github.com/torao44/SpaceTracker-Pro)
 
@@ -16,10 +16,11 @@
 - **現在地の肉眼可視パス予報**: GPS現在地から肉眼で見えるISSの通過予定（日時、最大仰角、出現・消滅方位、観測条件スコア）を自動算出。
 - **通過カウントダウン**: 次回ISSが頭上を通過する瞬間までのリアルタイムタイマー。
 
-### 2. 📱 スマホ空向け ARナビゲーション (v1.6.0 高精度AR & 最適化エンジン)
-スマートフォンを空に向けるだけで、カメラ実景映像または夜空HUD上にISSや星座の正確な位置をオーバーレイ表示します。
+### 2. 📱 スマホ＆タブレット空向け ARナビゲーション (v1.6.1 ハイブリッドARエンジン)
+スマートフォン・タブレットを空に向けるだけで、カメラ実景映像または夜空HUD上にISSや星座の正確な位置をオーバーレイ表示します。
+- **地磁気なしタブレット（TB331FC等）向けジャイロ自動追従**: 電子コンパス非搭載のタブレットでも、ジャイロスコープ（角速度）＋加速度センサーにより端末を動かすだけでAR画面がスムーズに追従。
 - **実景カメラHUDオーバーレイ**: カメラ起動時もISSの通過予定軌道線や地平線・東西南北マーカーが鮮明にオーバーレイ表示。
-- **画面回転（Landscape）自動補正**: スマホを横向きに構えても方位角と仰角の軸を自動補正。
+- **画面回転（Landscape）自動補正**: スマホやタブレットを横向きに構えても方位角と仰角の軸を自動補正。
 - **天頂ジッター抑制**: 真上（仰角75°〜90°）を見上げた際の方位急変・ブレを抑制する保護フィルター。
 - **3D回転ベクトル演算**: 背面カメラ光軸の3次元幾何投影により、iOS・Androidのどちらでも正確な方位・仰角（地平線0°〜天頂90°）を追随。
 - **真北（True North）& 磁気偏角自動補正**: 地磁気の偏角（日本各地の約-7.5°西偏）を自動補正。
