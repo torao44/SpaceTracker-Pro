@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spacetracker-pro-v10-20260928-ar-live'; // 更新するたびにここを変える（古いキャッシュを破棄させるため）
+const CACHE_NAME = 'spacetracker-pro-v11-20260929-ar-pitch-fix'; // 更新するたびにここを変える（古いキャッシュを破棄させるため）
 const CORE_ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.json'];
 
 self.addEventListener('install', (event) => {

@@ -1665,6 +1665,14 @@ function renderARCanvas() {
     ctx.fillStyle = arState.cameraActive ? '#4ee08a' : 'rgba(78, 224, 138, 0.7)';
     ctx.font = '10px monospace';
     ctx.fillText('地平線 (0°)', 12, horizonY - 6);
+  } else if (!arState.cameraActive && horizonY <= 0) {
+    // 全画面が地表・足元方向
+    ctx.fillStyle = '#040711';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(78, 224, 138, 0.7)';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('⬇ 地表・足元方向（ISSは上空にあります 👆）', w / 2, h / 2);
   }
 
   // Compass Cardinal Directions on Horizon (実景カメラ時も方位HUDとして描画)
@@ -1823,16 +1831,13 @@ function computeDeviceAngles(e) {
     let heading = (e.webkitCompassHeading + screenAngle + declination + compassOffset + 720) % 360;
     let pitch = 0;
     if (typeof e.beta === 'number' && !isNaN(e.beta)) {
-      const b = e.beta;
-      const g = (typeof e.gamma === 'number' && !isNaN(e.gamma)) ? e.gamma : 0;
-      // iOS縦持ち時: 垂直でbeta=90° -> 仰角0° (地平線)。空へ向けるとbetaが0°へ減少 -> 仰角+90° (天頂)。
-      const rollRad = (g * Math.PI) / 180;
-      let p = 90 - (b * Math.cos(rollRad));
-      if (Math.abs(screenAngle) === 90 || Math.abs(screenAngle) === 270) {
-        const pitchSign = screenAngle === 90 ? 1 : -1;
-        p = Math.abs(g) <= 90 ? Math.asin(Math.max(-1, Math.min(1, Math.cos(b * (Math.PI / 180)) * Math.sin(rollRad) * pitchSign))) * (180 / Math.PI) : p;
-      }
-      pitch = Math.max(-30, Math.min(90, p));
+      const bRad = (e.beta * Math.PI) / 180;
+      const gRad = ((typeof e.gamma === 'number' && !isNaN(e.gamma)) ? e.gamma : 0) * (Math.PI / 180);
+      // 3次元回転変換から背面カメラ光軸の鉛直成分（天頂+90°、水平0°、地面-90°）を厳密算出
+      const Vz = -Math.cos(bRad) * Math.cos(gRad);
+      const hDist = Math.sqrt(Math.max(0.0001, 1 - Vz * Vz));
+      pitch = Math.atan2(Vz, hDist) * (180 / Math.PI);
+      pitch = Math.max(-90, Math.min(90, pitch));
     }
 
     // 天頂付近（仰角 80°〜90°）でのジンバルロック・ジッター対策
@@ -1868,12 +1873,7 @@ function computeDeviceAngles(e) {
     // 背面カメラ光軸 [0, 0, -1] のワールド空間 (X:東, Y:北, Z:天) での射影ベクトル
     const Vx = - cA * sG - sA * sB * cG;
     const Vy = - sA * sG + cA * sB * cG;
-    let Vz = - cB * cG;
-
-    // 天頂方向へ向けた際の仰角正値化（一般的なスマホセンサーのロール角域）
-    if (Math.abs(e.gamma) <= 90 && e.beta >= 0 && e.beta <= 90) {
-      Vz = Math.abs(Vz);
-    }
+    const Vz = - cB * cG; // 天頂方向=+1、地平線=0、地面方向=-1
 
     // ワールド座標における方位角（北0°、東90°、南180°、西270°）
     let rawHeading = Math.atan2(Vx, Vy) * (180 / Math.PI);
@@ -1882,17 +1882,10 @@ function computeDeviceAngles(e) {
     // 横持ち画面回転角（screenAngle）および磁気偏角・ユーザー補正を合成
     let heading = (rawHeading + screenAngle + decl + compassOffset + 720) % 360;
 
-    // 仰角（水平0°、天頂90°）
+    // 仰角・俯角（水平0°、天頂+90°、地面-90°）
     const hDist = Math.sqrt(Vx * Vx + Vy * Vy);
     let pitch = Math.atan2(Vz, Math.max(0.001, hDist)) * (180 / Math.PI);
-    if (Math.abs(screenAngle) === 90 || Math.abs(screenAngle) === 270) {
-      const pitchSign = screenAngle === 90 ? 1 : -1;
-      const bRad = (e.beta * Math.PI) / 180;
-      const gRad = (e.gamma * Math.PI) / 180;
-      const landP = Math.abs(e.beta) <= 90 ? Math.asin(Math.max(-1, Math.min(1, Math.cos(gRad) * Math.sin(bRad) * pitchSign))) * (180 / Math.PI) : pitch;
-      pitch = landP;
-    }
-    pitch = Math.max(-30, Math.min(90, pitch));
+    pitch = Math.max(-90, Math.min(90, pitch));
 
     // 天頂付近（仰角 80°〜90°）でのジンバルロック・ジッター対策
     if (pitch >= 80) {
@@ -2963,7 +2956,7 @@ function startConstelLoop() {
 
       // Horizon line
       const horizonY = h * 0.5 + (arConstelState.pitch / 90) * (h * 0.8);
-      if (horizonY < h) {
+      if (horizonY < h && horizonY > 0) {
         ctx.fillStyle = 'rgba(7, 14, 28, 0.9)';
         ctx.fillRect(0, horizonY, w, h - horizonY);
         ctx.strokeStyle = 'rgba(79, 209, 232, 0.4)';
@@ -2977,6 +2970,14 @@ function startConstelLoop() {
         ctx.fillStyle = 'rgba(79, 209, 232, 0.7)';
         ctx.font = '10px sans-serif';
         ctx.fillText('地平線 (0° HORIZON)', 14, horizonY - 6);
+      } else if (horizonY <= 0) {
+        // 全画面が地表・足元方向
+        ctx.fillStyle = 'rgba(7, 14, 28, 0.96)';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = 'rgba(79, 209, 232, 0.7)';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('⬇ 地表・足元方向（星座は上空にあります 👆）', w / 2, h / 2);
       }
     }
 
