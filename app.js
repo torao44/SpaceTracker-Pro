@@ -1664,13 +1664,14 @@ function renderARCanvas() {
 
     ctx.fillStyle = arState.cameraActive ? '#4ee08a' : 'rgba(78, 224, 138, 0.7)';
     ctx.font = '10px monospace';
-    ctx.fillText('地平線 (0°)', 12, horizonY - 6);
-  } else if (!arState.cameraActive && horizonY <= 0) {
-    // 全画面が地表・足元方向
-    ctx.fillStyle = '#040711';
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(78, 224, 138, 0.7)';
-    ctx.font = '12px sans-serif';
+  } else if (horizonY <= 0) {
+    // 全画面が地表・足元方向（スマホを下に向けている時）
+    if (!arState.cameraActive) {
+      ctx.fillStyle = '#040711';
+      ctx.fillRect(0, 0, w, h);
+    }
+    ctx.fillStyle = arState.cameraActive ? '#4ee08a' : 'rgba(78, 224, 138, 0.85)';
+    ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('⬇ 地表・足元方向（ISSは上空にあります 👆）', w / 2, h / 2);
   }
@@ -1859,50 +1860,57 @@ function computeDeviceAngles(e) {
   }
 
   // 2. Android / W3C 標準: 端末オイラー角 (alpha, beta, gamma) を3次元ベクトル変換
-  if (e.alpha !== null && e.beta !== null && e.gamma !== null &&
-      !isNaN(e.alpha) && !isNaN(e.beta) && !isNaN(e.gamma)) {
+  if (e.beta !== null && e.gamma !== null && !isNaN(e.beta) && !isNaN(e.gamma)) {
     const degToRad = Math.PI / 180;
-    const a = e.alpha * degToRad; // Z axis (screen normal)
-    const b = e.beta * degToRad;  // X axis (horizontal)
-    const g = e.gamma * degToRad; // Y axis (vertical)
+    const b = e.beta * degToRad;  // X axis (horizontal tilt / pitch)
+    const g = e.gamma * degToRad; // Y axis (vertical tilt / roll)
 
-    const cA = Math.cos(a), sA = Math.sin(a);
     const cB = Math.cos(b), sB = Math.sin(b);
     const cG = Math.cos(g), sG = Math.sin(g);
 
-    // 背面カメラ光軸 [0, 0, -1] のワールド空間 (X:東, Y:北, Z:天) での射影ベクトル
-    const Vx = - cA * sG - sA * sB * cG;
-    const Vy = - sA * sG + cA * sB * cG;
-    const Vz = - cB * cG; // 天頂方向=+1、地平線=0、地面方向=-1
-
-    // ワールド座標における方位角（北0°、東90°、南180°、西270°）
-    let rawHeading = Math.atan2(Vx, Vy) * (180 / Math.PI);
-    const isAbs = e.type === 'deviceorientationabsolute' || isAbsoluteActive;
-    const decl = isAbs ? 0 : declination;
-    // 横持ち画面回転角（screenAngle）および磁気偏角・ユーザー補正を合成
-    let heading = (rawHeading + screenAngle + decl + compassOffset + 720) % 360;
-
-    // 仰角・俯角（水平0°、天頂+90°、地面-90°）
-    const hDist = Math.sqrt(Vx * Vx + Vy * Vy);
-    let pitch = Math.atan2(Vz, Math.max(0.001, hDist)) * (180 / Math.PI);
+    // 背面カメラ光軸 [0, 0, -1] の鉛直成分 Vz (天頂=+1、地平線=0、地面方向=-1)
+    const Vz = - cB * cG;
+    const hDist = Math.sqrt(Math.max(0.0001, 1 - Vz * Vz));
+    let pitch = Math.atan2(Vz, hDist) * (180 / Math.PI);
     pitch = Math.max(-90, Math.min(90, pitch));
 
-    // 天頂付近（仰角 80°〜90°）でのジンバルロック・ジッター対策
-    if (pitch >= 80) {
-      if (lastStableHeading !== null) {
-        if (pitch >= 85) {
-          heading = lastStableHeading;
-        } else {
-          const blend = (pitch - 80) / 5;
-          const diff = ((heading - lastStableHeading + 540) % 360) - 180;
-          heading = (lastStableHeading + diff * (1 - blend * 0.85) + 360) % 360;
-        }
-      }
-    } else {
-      lastStableHeading = heading;
-    }
+    const hasAlpha = typeof e.alpha === 'number' && !isNaN(e.alpha) && e.alpha !== null;
+    if (hasAlpha) {
+      const a = e.alpha * degToRad; // Z axis (screen normal)
+      const cA = Math.cos(a), sA = Math.sin(a);
 
-    return { heading, pitch };
+      // 背面カメラ光軸 [0, 0, -1] のワールド空間 (X:東, Y:北, Z:天) での射影ベクトル
+      const Vx = - cA * sG - sA * sB * cG;
+      const Vy = - sA * sG + cA * sB * cG;
+
+      // ワールド座標における方位角（北0°、東90°、南180°、西270°）
+      let rawHeading = Math.atan2(Vx, Vy) * (180 / Math.PI);
+      const isAbs = e.type === 'deviceorientationabsolute' || isAbsoluteActive;
+      const decl = isAbs ? 0 : declination;
+      // 横持ち画面回転角（screenAngle）および磁気偏角・ユーザー補正を合成
+      let heading = (rawHeading + screenAngle + decl + compassOffset + 720) % 360;
+
+      // 天頂付近（仰角 80°〜90°）でのジンバルロック・ジッター対策
+      if (pitch >= 80) {
+        if (lastStableHeading !== null) {
+          if (pitch >= 85) {
+            heading = lastStableHeading;
+          } else {
+            const blend = (pitch - 80) / 5;
+            const diff = ((heading - lastStableHeading + 540) % 360) - 180;
+            heading = (lastStableHeading + diff * (1 - blend * 0.85) + 360) % 360;
+          }
+        }
+      } else {
+        lastStableHeading = heading;
+      }
+
+      return { heading, pitch, hasCompass: true };
+    } else {
+      // 地磁気センサー・コンパスが未搭載の端末（廉価版Android等）
+      // 仰角（Pitch）は加速度センサーの重力ベクトルから正確に追従
+      return { heading: null, pitch, hasCompass: false };
+    }
   }
 
   return null;
@@ -1945,17 +1953,19 @@ let isAbsoluteActive = false;
 function handleOrientation(e) {
   if (!arState.active || arState.manualMode) return;
 
-  // deviceorientationabsolute が有効な場合は通常の deviceorientation の重複処理をスキップ
-  if (e.type === 'deviceorientationabsolute') {
+  // deviceorientationabsolute が有効で有効な数値データがある場合のみ競合防止
+  if (e.type === 'deviceorientationabsolute' && typeof e.alpha === 'number' && !isNaN(e.alpha) && e.alpha !== null) {
     isAbsoluteActive = true;
-  } else if (isAbsoluteActive) {
+  } else if (isAbsoluteActive && e.type !== 'deviceorientationabsolute') {
     return;
   }
 
   const angles = computeDeviceAngles(e);
   if (!angles) return;
 
-  arState.azimuth = smoothOrientation(arState.azimuth, angles.heading, true, angles.pitch);
+  if (angles.hasCompass !== false && angles.heading !== null) {
+    arState.azimuth = smoothOrientation(arState.azimuth, angles.heading, true, angles.pitch);
+  }
   arState.pitch = smoothOrientation(arState.pitch, angles.pitch, false, angles.pitch);
 }
 
@@ -1986,7 +1996,7 @@ async function requestARSensorPermission() {
 async function startARCamera() {
   try {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert('お使いの環境はカメラアクセスに対応していません');
+      console.warn('Camera API not supported in this environment');
       return;
     }
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -1997,15 +2007,14 @@ async function startARCamera() {
     if (els.arVideo) {
       els.arVideo.srcObject = stream;
       els.arVideo.hidden = false;
-      els.arVideo.play();
+      els.arVideo.play().catch(() => {});
     }
     arState.cameraActive = true;
     if (els.arCamBtn) els.arCamBtn.classList.add('active');
     if (els.arCamText) els.arCamText.textContent = '夜空HUD';
     if (els.arCanvas) els.arCanvas.style.opacity = '1'; // Transparent canvas overlay on top of camera
   } catch (err) {
-    console.warn('Camera failed:', err);
-    alert('カメラの起動に失敗しました（夜空HUDモードで動作します）');
+    console.warn('Camera failed, fallback to virtual sky HUD:', err);
     stopARCamera();
   }
 }
@@ -2070,6 +2079,7 @@ window.openARNavigator = function(passIndex = 0) {
   resizeARCanvas();
   renderARPassTabs();
   selectARPass(passIndex);
+  startARCamera();
 
   // Check iOS permission requirement
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -2856,16 +2866,18 @@ function initConstelOrientation() {
   const onOrientation = (e) => {
     if (arConstelState.manualMode || !arConstelState.active) return;
 
-    if (e.type === 'deviceorientationabsolute') {
+    if (e.type === 'deviceorientationabsolute' && typeof e.alpha === 'number' && !isNaN(e.alpha) && e.alpha !== null) {
       isConstelAbsoluteActive = true;
-    } else if (isConstelAbsoluteActive) {
+    } else if (isConstelAbsoluteActive && e.type !== 'deviceorientationabsolute') {
       return;
     }
 
     const angles = computeDeviceAngles(e);
     if (!angles) return;
 
-    arConstelState.azimuth = smoothOrientation(arConstelState.azimuth, angles.heading, true, angles.pitch);
+    if (angles.hasCompass !== false && angles.heading !== null) {
+      arConstelState.azimuth = smoothOrientation(arConstelState.azimuth, angles.heading, true, angles.pitch);
+    }
     arConstelState.pitch = smoothOrientation(arConstelState.pitch, angles.pitch, false, angles.pitch);
   };
 
