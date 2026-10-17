@@ -1,6 +1,6 @@
-# 🛰️ SpaceTracker Pro (v1.5.2)
+# 🛰️ SpaceTracker Pro (v1.5.3)
 
-[![Version](https://img.shields.io/badge/version-1.5.2-blue.svg)](https://github.com/torao44/SpaceTracker-Pro)
+[![Version](https://img.shields.io/badge/version-1.5.3-blue.svg)](https://github.com/torao44/SpaceTracker-Pro)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PWA Ready](https://img.shields.io/badge/PWA-Ready-green.svg)](https://github.com/torao44/SpaceTracker-Pro)
 
@@ -16,9 +16,11 @@
 - **現在地の肉眼可視パス予報**: GPS現在地から肉眼で見えるISSの通過予定（日時、最大仰角、出現・消滅方位、観測条件スコア）を自動算出。
 - **通過カウントダウン**: 次回ISSが頭上を通過する瞬間までのリアルタイムタイマー。
 
-### 2. 📱 スマホ空向け ARナビゲーション (v1.5.2 最新センサーエンジン)
-スマートフォンを空に向けるだけで、カメラ実景映像または夜空HUD上にISSや星座の正確な位置をオーバーレイ表示します。
-- **3D回転ベクトル演算**: 背面カメラ光軸の3次元幾何投影により、iOS・Androidのどちらでも正確な方位・仰角（地平線0°〜天頂90°）を追随。
+### 2. 📱 スマホ空向け カメラオーバーレイ型ARナビゲーション (v1.5.3 Google AR不要・全機種対応)
+スマートフォンを空に向けるだけで、カメラ実景映像または夜空HUD上にISSや星座の正確な位置をリアルタイムにオーバーレイ表示します。
+- **Google AR (ARCore) 不要の軽量カメラオーバーレイ**: Google Play開発者サービス(AR)が未搭載の端末でも、WebRTC背面カメラ映像とHTML5 Canvasの直接重層描画により軽快に動作。
+- **電子コンパス非搭載端末へのインテリジェント・フォールバック**: 地磁気センサーを持たない廉価版端末でも、加速度センサーの重力ベクトルから仰角（天頂+90°〜地平線0°〜足元地面-90°）を完全追従。スマホを下に向けても正確に地表・俯角を判定。
+- **3D回転ベクトル演算**: 背面カメラ光軸の3次元幾何投影により、iOS・Androidのどちらでも正確な方位・仰角を追随。
 - **真北（True North）& 磁気偏角自動補正**: 地磁気の偏角（日本各地の約-7.5°西偏）を自動補正。
 - **能動的キャリブレーションUI**: ワンタップで「◀ 90° 西へ」「90° 東へ ▶」「🧭 今の向きを北にする」「±5° 微調整」ができる補正パネルを搭載。
 - **ダイナミック・ソナー誘導**: ターゲット（ISS・星座）に近づくほど音程が高くなり、間隔が早くなる近接ソナー音と振動（ハプティクス）フィードバック。
