@@ -190,6 +190,30 @@ function getSunAltDeg(date, lat, lon) {
   return Math.asin(sinAlt) / rad;
 }
 
+// ISSが地球の影に入っているか判定する（円筒近似）
+// 太陽方向（地心赤道座標）と衛星のECI位置から、
+// 衛星が地球の夜側にいて太陽光が届かない状態かどうかを返す
+function isSatEclipsed(positionEci, date) {
+  const rad = Math.PI / 180;
+  const d = date.getTime() / 86400000 - 10957.5;
+  const L = (280.46 + 0.9856474 * d) % 360;
+  const g = ((357.528 + 0.9856003 * d) % 360) * rad;
+  const lambda = (L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * rad;
+  const eps = 23.439 * rad;
+  // 太陽方向の単位ベクトル（地心赤道座標）
+  const sx = Math.cos(lambda);
+  const sy = Math.cos(eps) * Math.sin(lambda);
+  const sz = Math.sin(eps) * Math.sin(lambda);
+  const { x, y, z } = positionEci; // ECI座標 [km]
+  const along = x * sx + y * sy + z * sz;
+  if (along >= 0) return false; // 太陽側にいるので日が当たっている
+  // 地球-太陽軸からの垂直距離が地球半径未満なら影の中
+  const px = x - along * sx;
+  const py = y - along * sy;
+  const pz = z - along * sz;
+  return Math.sqrt(px * px + py * py + pz * pz) < 6371;
+}
+
 function renderPassRadar(pass, size = 68) {
   const cx = size / 2;
   const cy = size / 2;
@@ -358,12 +382,14 @@ async function loadISSPasses(lat, lon, cityName) {
       const az = look.azimuth * (180 / Math.PI);
 
       if (elev > 10) {
+        const eclipsedNow = isSatEclipsed(pv.position, time);
         if (!inPass) {
           inPass = true;
           currentPass = {
             start: time,
             maxElev: elev,
             maxElevTime: time,
+            sunlitAtMax: !eclipsedNow,
             startAz: az,
             maxAz: az,
             end: time,
@@ -373,6 +399,7 @@ async function loadISSPasses(lat, lon, cityName) {
           if (elev > currentPass.maxElev) {
             currentPass.maxElev = elev;
             currentPass.maxElevTime = time;
+            currentPass.sunlitAtMax = !eclipsedNow;
             currentPass.maxAz = az;
           }
           currentPass.end = time;
@@ -383,7 +410,7 @@ async function loadISSPasses(lat, lon, cityName) {
           inPass = false;
           if (currentPass.maxElev >= 15) {
             const sunAlt = getSunAltDeg(currentPass.maxElevTime, lat, lon);
-            if (sunAlt <= -6 && sunAlt >= -36) {
+            if (sunAlt <= -6 && sunAlt >= -36 && currentPass.sunlitAtMax) {
               const maxElevDeg = Math.round(currentPass.maxElev);
               let quality = 'normal';
               let qualityLabel = '標準観測';
