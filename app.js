@@ -167,6 +167,45 @@ async function getISSTLE() {
   return FALLBACK_ISS_TLE;
 }
 
+/* ---------------- ISS 実位置計算（ARライブ追尾用） ----------------
+   パス走査で作った satrec を使い回し、SGP4 で実位置の方位・仰角を返す。
+   以前の「開始・最大・終了の3点を時間比例でつなぐ近似」は、高いパスほど
+   頂上付近で実物より遅れて見えたため、実計算に置き換えた（v1.5.4）。 */
+let cachedISSatrec = null;
+
+async function ensureISSatrec() {
+  if (cachedISSatrec) return cachedISSatrec;
+  if (typeof window.satellite === 'undefined') return null;
+  try {
+    const tle = await getISSTLE();
+    cachedISSatrec = window.satellite.twoline2satrec(tle.line1, tle.line2);
+  } catch (e) {
+    console.warn('satrec生成に失敗', e);
+  }
+  return cachedISSatrec;
+}
+
+function getISSNowAzEl(date) {
+  if (!cachedISSatrec || typeof window.satellite === 'undefined') return null;
+  if (!userLocation || typeof userLocation.lat !== 'number' || typeof userLocation.lon !== 'number') return null;
+  const sat = window.satellite;
+  const pv = sat.propagate(cachedISSatrec, date);
+  if (!pv.position || typeof pv.position.x !== 'number') return null;
+  const gmst = sat.gstime(date);
+  const posEcf = sat.eciToEcf(pv.position, gmst);
+  const rad = Math.PI / 180;
+  const observerGd = {
+    latitude: userLocation.lat * rad,
+    longitude: userLocation.lon * rad,
+    height: 0.05
+  };
+  const look = sat.ecfToLookAngles(observerGd, posEcf);
+  return {
+    az: ((look.azimuth * 180 / Math.PI) % 360 + 360) % 360,
+    elev: look.elevation * 180 / Math.PI
+  };
+}
+
 function azToCompass(deg) {
   const norm = ((deg % 360) + 360) % 360;
   const dirs = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'];
@@ -354,6 +393,7 @@ async function loadISSPasses(lat, lon, cityName) {
     const tle = await getISSTLE();
     const sat = window.satellite;
     const satrec = sat.twoline2satrec(tle.line1, tle.line2);
+    cachedISSatrec = satrec; // ARライブ追尾でも使い回す
 
     const rad = Math.PI / 180;
     const observerGd = {
@@ -1436,6 +1476,17 @@ function getARTargetCoords() {
   const isCurrentlyPassing = startTime && endTime && now >= startTime && now <= endTime;
 
   if ((isCurrentlyPassing || arState.phase === 'live') && startTime && endTime) {
+    // 実位置（SGP4）が得られればそれを優先する（時間比例の近似より実物に同期する）
+    const realPos = getISSNowAzEl(now);
+    if (realPos && realPos.elev > 0) {
+      return {
+        az: Math.round(realPos.az),
+        elev: Math.round(Math.max(5, realPos.elev)),
+        label: `🔴 LIVE リアルタイム追尾中 (仰角 ${Math.round(realPos.elev)}°)`,
+        time: now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      };
+    }
+
     const nowMs = now.getTime();
     const startMs = startTime.getTime();
     const endMs = endTime.getTime();
@@ -1744,12 +1795,18 @@ function renderARCanvas() {
     ctx.setLineDash([6, 6]);
     ctx.beginPath();
 
-    const samples = 20;
+    const arcStartTime = pass.startTime instanceof Date ? pass.startTime : (pass.startTime ? new Date(pass.startTime) : null);
+    const arcEndTime = pass.endTime instanceof Date ? pass.endTime : (pass.endTime ? new Date(pass.endTime) : null);
+    const samples = 40;
     let started = false;
     for (let i = 0; i <= samples; i++) {
       const t = i / samples;
-      const curAz = pass.startAz + (pass.endAz - pass.startAz) * t;
-      const curElev = 10 + Math.sin(t * Math.PI) * (pass.maxElev - 10);
+      // 軌道線も実位置（SGP4）でサンプリングする。得られない場合のみ従来の近似弧にフォールバック
+      const realPt = (arcStartTime && arcEndTime)
+        ? getISSNowAzEl(new Date(arcStartTime.getTime() + (arcEndTime.getTime() - arcStartTime.getTime()) * t))
+        : null;
+      const curAz = realPt ? realPt.az : pass.startAz + (pass.endAz - pass.startAz) * t;
+      const curElev = realPt ? realPt.elev : 10 + Math.sin(t * Math.PI) * (pass.maxElev - 10);
 
       const pDeltaAz = ((curAz - arState.azimuth + 540) % 360) - 180;
       const pDeltaElev = curElev - arState.pitch;
@@ -2118,6 +2175,7 @@ window.openARNavigator = function(passIndex = 0) {
   window.addEventListener('deviceorientationabsolute', handleOrientation, true);
   window.addEventListener('deviceorientation', handleOrientation, true);
 
+  ensureISSatrec(); // ARライブ追尾用の実位置計算を準備（取れなければ近似にフォールバック）
   cancelAnimationFrame(arState.animId);
   loopAR();
 };

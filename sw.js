@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spacetracker-pro-v12-20261017-camera-overlay'; // 更新するたびにここを変える（古いキャッシュを破棄させるため）
+const CACHE_NAME = 'spacetracker-pro-v13-20261113-ar-sgp4-live'; // 更新するたびにここを変える（古いキャッシュを破棄させるため）
 const CORE_ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.json'];
 
 self.addEventListener('install', (event) => {
